@@ -220,6 +220,24 @@ async def update_grid(pool: asyncpg.Pool, actor_id: int, stunt_id: int, data: di
             return _out(dict(await conn.fetchrow(f"SELECT {STUNT_COLS} FROM stunts WHERE id = $1", stunt_id)))
 
 
+async def get_grid(pool: asyncpg.Pool, stunt_id: int) -> dict:
+    """อ่าน grid เต็ม (A/B) สำหรับ Pixel Studio — `StuntOut` ตั้งใจไม่พก payload 1MB มาทุก list."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT grid_width, grid_height, grid_data_a, grid_data_b FROM stunts"
+            " WHERE id = $1 AND deleted_at IS NULL", stunt_id,
+        )
+        if not row:
+            raise NotFoundError("ไม่พบ stunt")
+        # ยังไม่เคยบันทึก → คืน array ว่าง (frontend จะสร้าง grid เปล่าตามขนาด)
+        return {
+            "grid_width": row["grid_width"],
+            "grid_height": row["grid_height"],
+            "grid_data_a": _json(row["grid_data_a"]) or [],
+            "grid_data_b": _json(row["grid_data_b"]) or [],
+        }
+
+
 def _validate(grid, w, h, allowed):
     if grid is None:
         return
@@ -329,9 +347,16 @@ async def upload_reference(pool: asyncpg.Pool, actor_id: int, stunt_id: int, con
 
 
 async def stats(pool: asyncpg.Pool, stunt_id: int) -> dict:
-    stunt = await get_stunt(pool, stunt_id)
-    a = _json(stunt["grid_data_a"]) or []
-    b = _json(stunt["grid_data_b"]) or []
+    # ⚠️ ต้องดึง grid_data_* แยก — `STUNT_COLS` ตั้งใจไม่พก payload 1MB ใน list
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT grid_width, grid_height, grid_data_a, grid_data_b FROM stunts"
+            " WHERE id = $1 AND deleted_at IS NULL", stunt_id,
+        )
+    if not row:
+        raise NotFoundError("ไม่พบ stunt")
+    a = _json(row["grid_data_a"]) or []
+    b = _json(row["grid_data_b"]) or []
     def counts(data):
         c = {}
         filled = 0
@@ -342,7 +367,7 @@ async def stats(pool: asyncpg.Pool, stunt_id: int) -> dict:
         return filled, c
     fa, ca = counts(a)
     fb, cb = counts(b)
-    total = stunt["grid_width"] * stunt["grid_height"]
+    total = row["grid_width"] * row["grid_height"]
     return {
         "total_cells": total,
         "filled_a": fa, "filled_b": fb,

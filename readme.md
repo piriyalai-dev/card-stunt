@@ -3,7 +3,7 @@
 แปลงรูปจริงเป็นพิกเซล → วาด/แก้บน Canvas → เผยแพร่โพยให้นักเรียน 500–1,500 คนเปิดดูบนมือถือกลางสนาม
 (design report: `~/reports/card-stunt-design-report.html`)
 
-**สถานะ: Phase 3 — Backend Core** (schema + RBAC + domain APIs + Redis cache + SSE live sync · ยังไม่ deploy ลง Swarm)
+**สถานะ: Phase 4 — Frontend Admin + Engine** (หน้าจัดการงาน/แสตน/ชุดสี/ฉาก + แปลงรูปเป็นพิกเซล + Pixel Studio · ยังไม่ deploy ลง Swarm · Viewer PWA/export อยู่ Phase 5)
 
 ## โครงสร้าง
 
@@ -55,10 +55,24 @@ cd frontend && npm run dev                                                   # :
 | ARQ queue / PG NOTIFY | `pixelstand:queue:export` / `pixelstand_live` |
 | test pg port | `5436` |
 
-## API (Phase 3 — prefix `/api/v1`)
+## Frontend (Phase 4)
+
+| route | หน้า |
+|---|---|
+| `/admin/home` | แดชบอร์ด — สร้าง/เลือกงาน |
+| `/admin/events/:id` | ภาพรวมงาน + แท็บ `stands` / `palettes` / `stunts` |
+| `/admin/stunts/:id/convert` | Image-to-Pixel (ครอป · ปรับภาพ · quantize CIELAB · dither) |
+| `/admin/stunts/:id/studio` | Pixel Studio (canvas หลายชั้น, tools, undo/redo, draft, revisions, A/B) |
+
+Engine แยกเป็น pure modules ใน `frontend/src/lib/` (`geometry`, `color`, `grid`, `quantize`, `crop`, `renderer`)
+⇒ เทสต์ได้โดยไม่ต้องมี canvas · Canvas วาดด้วย `ImageData` 1 px/ช่อง + `drawImage` nearest-neighbor
+(250×400 = 100,000 ช่อง ยังอยู่ที่ ~60fps)
+
+## API (Phase 3+4 — prefix `/api/v1`)
 
 - Auth/Users: `/auth/*`, `/users`
-- Domain: `/events` (+ nested `/stands`, `/palettes`, `/stunts`, `/rosters`, `/exports`), `/stands/{id}/resize|blocked-seats`, `/stunts/{id}/grid|revisions|reference-image`, `/palettes/{id}/colors`
+- Domain: `/events` (+ nested `/stands`, `/palettes`, `/stunts`, `/rosters`, `/exports`), `/stands/{id}/resize|blocked-seats`, `/stunts/{id}/grid|revisions|reference-image|stats`, `/palettes/{id}/colors`
+- Studio ใช้ `GET /stunts/{id}/grid` (grid เต็ม A/B) แล้ว `PUT /stunts/{id}/grid` ตอนบันทึก
 - Live: `POST /events/{id}/live/advance`
 - Public (ไม่ auth): `/public/events/{slug}/{meta|seat|version|live}`
 - Admin: `/audit-logs`, `/version`

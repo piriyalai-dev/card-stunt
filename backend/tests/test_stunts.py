@@ -29,6 +29,61 @@ async def test_grid_validation(client, admin, event_row, stand_row, palette_row)
 
 
 @pytest.mark.asyncio
+async def test_get_grid_round_trip(client, admin, event_row, stand_row, palette_row):
+    """Studio ต้องโหลด grid เดิมได้ — endpoint นี้คือคู่ของ PUT /grid."""
+    color_a = palette_row["colors"][0]["id"]
+    s = client.post(f"/api/v1/events/{event_row['id']}/stunts",
+                    json={"code": "S1", "title": "ฉาก", "palette_a_id": palette_row["id"]},
+                    headers={"Authorization": f"Bearer {admin['token']}"})
+    sid = s.json()["id"]
+
+    # ยังไม่เคยบันทึก → array ว่าง
+    r = client.get(f"/api/v1/stunts/{sid}/grid",
+                   headers={"Authorization": f"Bearer {admin['token']}"})
+    assert r.status_code == 200, r.text
+    assert r.json()["grid_data_a"] == []
+    assert r.json()["grid_width"] == 165
+
+    g = [color_a] * (165 * 45)
+    assert client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data_a": g},
+                      headers={"Authorization": f"Bearer {admin['token']}"}).status_code == 200
+
+    r = client.get(f"/api/v1/stunts/{sid}/grid",
+                   headers={"Authorization": f"Bearer {admin['token']}"})
+    assert r.status_code == 200, r.text
+    assert r.json()["grid_data_a"] == g
+
+
+@pytest.mark.asyncio
+async def test_stats_counts_grid(client, admin, event_row, stand_row, palette_row):
+    """REGRESSION: stats เคย 500 เพราะอ่าน grid_data จาก query ที่ไม่ได้ select."""
+    color_a = palette_row["colors"][0]["id"]
+    color_b = palette_row["colors"][1]["id"]
+    s = client.post(f"/api/v1/events/{event_row['id']}/stunts",
+                    json={"code": "S1", "title": "ฉาก", "palette_a_id": palette_row["id"]},
+                    headers={"Authorization": f"Bearer {admin['token']}"})
+    sid = s.json()["id"]
+    grid = [color_a, color_a, None, color_b] + [None] * (165 * 45 - 4)
+    assert client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data_a": grid},
+                      headers={"Authorization": f"Bearer {admin['token']}"}).status_code == 200
+    r = client.get(f"/api/v1/stunts/{sid}/stats",
+                   headers={"Authorization": f"Bearer {admin['token']}"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["filled_a"] == 3
+    assert body["color_counts_a"][str(color_a)] == 2
+    assert body["color_counts_a"][str(color_b)] == 1
+    assert body["total_cells"] == 165 * 45
+
+
+@pytest.mark.asyncio
+async def test_get_grid_unknown_stunt_404(client, admin):
+    r = client.get("/api/v1/stunts/999999/grid",
+                   headers={"Authorization": f"Bearer {admin['token']}"})
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_revisions_snapshot_and_restore(client, admin, event_row, stand_row, palette_row):
     color_a = palette_row["colors"][0]["id"]
     color_b = palette_row["colors"][1]["id"]

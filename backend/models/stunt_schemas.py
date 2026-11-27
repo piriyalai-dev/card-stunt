@@ -58,6 +58,13 @@ class StuntOut(BaseModel):
     updated_at: datetime
 
 
+class GridOut(BaseModel):
+    grid_width: int
+    grid_height: int
+    grid_data_a: List[Optional[int]] = []
+    grid_data_b: List[Optional[int]] = []
+
+
 class RevisionOut(BaseModel):
     id: int
     revision_no: int

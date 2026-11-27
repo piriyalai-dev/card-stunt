@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 
 from core.dependencies import get_current_user, get_db_pool
 from core.exceptions import ForbiddenError, NotFoundError
-from models.stunt_schemas import StuntUpdate, StuntOut, GridUpdate, RevisionOut, StuntStats
+from models.stunt_schemas import StuntUpdate, StuntOut, GridUpdate, GridOut, RevisionOut, StuntStats
 from services import stunts_service
 from routers._common import map_err, ensure_user
 
@@ -34,6 +34,15 @@ async def delete_stunt(stunt_id: int, user_ctx: dict = Depends(get_current_user)
     try:
         await stunts_service.delete_stunt(pool, uid, stunt_id)
         return {"status": "ok"}
+    except Exception as e:
+        raise map_err(e)
+
+
+@router.get("/{stunt_id}/grid", response_model=GridOut)
+async def get_grid(stunt_id: int, user_ctx: dict = Depends(get_current_user), pool: asyncpg.Pool = Depends(get_db_pool)):
+    ensure_user(user_ctx)
+    try:
+        return await stunts_service.get_grid(pool, stunt_id)
     except Exception as e:
         raise map_err(e)
 

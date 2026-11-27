@@ -29,6 +29,50 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
+          // งาน (event) — แท็บย่อยทั้งหมดอยู่ใน EventWorkspace
+          path: 'events/:eventId',
+          component: () => import('@/views/admin/EventWorkspace.vue'),
+          meta: { requiresAuth: true },
+          children: [
+            {
+              path: '',
+              name: 'event-overview',
+              component: () => import('@/views/admin/EventOverview.vue'),
+              meta: { requiresAuth: true },
+            },
+            {
+              path: 'stands',
+              name: 'event-stands',
+              component: () => import('@/views/admin/StandConfigurator.vue'),
+              meta: { requiresAuth: true, requiresPermission: 'MANAGE_STANDS' },
+            },
+            {
+              path: 'palettes',
+              name: 'event-palettes',
+              component: () => import('@/views/admin/PaletteManager.vue'),
+              meta: { requiresAuth: true, requiresPermission: 'MANAGE_PALETTES' },
+            },
+            {
+              path: 'stunts',
+              name: 'event-stunts',
+              component: () => import('@/views/admin/StuntManager.vue'),
+              meta: { requiresAuth: true, requiresPermission: 'MANAGE_STUNTS' },
+            },
+          ],
+        },
+        {
+          path: 'stunts/:stuntId/studio',
+          name: 'stunt-studio',
+          component: () => import('@/views/admin/PixelStudio.vue'),
+          meta: { requiresAuth: true, requiresPermission: 'MANAGE_STUNTS' },
+        },
+        {
+          path: 'stunts/:stuntId/convert',
+          name: 'stunt-convert',
+          component: () => import('@/views/admin/ImageConverter.vue'),
+          meta: { requiresAuth: true, requiresPermission: 'MANAGE_STUNTS' },
+        },
+        {
           path: 'password',
           name: 'admin-password',
           component: () => import('@/views/auth/ChangePassword.vue'),
