@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased] — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
+## [Unreleased] — ยังไม่ตัดเวอร์ชัน
+
+## [0.4.0] — 2026-11-28 — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
 
 ### Phase 5 — Student Viewer PWA (2026-11-27)
 
@@ -104,7 +106,8 @@
 
 **Migration:** `001_init_auth` — DB schema เริ่มจาก `core/init_db.py` (users)
 
-[Unreleased]: https://github.com/piriyalai-dev/card-stunt/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/piriyalai-dev/card-stunt/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/piriyalai-dev/card-stunt/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/piriyalai-dev/card-stunt/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/piriyalai-dev/card-stunt/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/piriyalai-dev/card-stunt/compare/v0.2.0...v0.3.0
