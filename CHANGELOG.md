@@ -1,6 +1,15 @@
 # Changelog
 
-## [Unreleased] — ยังไม่ตัดเวอร์ชัน
+## [Unreleased] — Fix blank SUPER_ADMIN_ID crash
+
+### Fix (2026-11-28)
+
+- `SUPER_ADMIN_ID=` (เว้นว่าง) เคยทำให้ `Settings()` โยน `ValidationError` ตอน import
+  → backend container crash-loop ตอน deploy แรก · เพิ่ม validator แปลงค่าว่างเป็น `0`
+  และปรับ `.env.example` เป็น `SUPER_ADMIN_ID=0`
+- Tests: regression สำหรับค่าว่าง/ค่าปกติ + CORS default
+
+**Migration:** ไม่มี migration ใหม่
 
 ## [0.3.2] — 2026-11-28 — Docker build context hygiene
 

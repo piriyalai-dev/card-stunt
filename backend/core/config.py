@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,6 +59,18 @@ class Settings(BaseSettings):
     # Roster import limits
     ROSTER_MAX_ROWS: int = 5000
     ROSTER_FILE_SIZE_LIMIT_MB: int = 5
+
+    @field_validator("SUPER_ADMIN_ID", mode="before")
+    @classmethod
+    def _blank_super_admin_is_zero(cls, value):
+        """`.env` ที่ตั้ง `SUPER_ADMIN_ID=` (เว้นว่าง) ต้องไม่ทำให้ container crash.
+
+        ⚠️ pydantic-settings ใช้ค่าว่างจาก env ทับ default แล้วพยายามแปลงเป็น int
+        ⇒ `ValidationError` ตอน import settings (เกิดจริงตอน deploy แรก)
+        """
+        if value is None or (isinstance(value, str) and value.strip() == ""):
+            return 0
+        return value
 
     model_config = SettingsConfigDict(
         env_file=".env",
