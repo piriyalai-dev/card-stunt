@@ -1,0 +1,36 @@
+# Pixel Stand — data layer (Postgres + Redis)
+# Swarm-ready: แชร์ network `pixelstand-internal` กับ stack app
+# ⚠️ Phase 2 ยังไม่ deploy — ใช้ `docker compose config` เช็ค syntax + test harness (docker-compose.test.yml) แทน
+version: "3.8"
+services:
+  db:
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - pixelstand-internal
+    deploy:
+      replicas: 1
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - pixelstand-internal
+    deploy:
+      replicas: 1
+
+volumes:
+  # ชื่อ volume คงที่ (single environment — ไม่มี ENV_NAME แบบ prsc)
+  postgres_data:
+    name: pixelstand_postgres_data
+  redis_data:
+    name: pixelstand_redis_data
+
+networks:
+  pixelstand-internal:
+    external: true

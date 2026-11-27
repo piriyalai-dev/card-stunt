@@ -1,0 +1,37 @@
+# Pixel Stand — test harness (รันด้วย plain `docker compose` ไม่ใช่ Swarm)
+services:
+  test_db:
+    image: postgres:16-alpine
+    container_name: pixelstand_test_postgres
+    environment:
+      POSTGRES_USER: test_admin
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: test_pixelstand_db
+    ports:
+      - "5436:5432" # 5436 (5435 = prsc_portal)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_admin -d test_pixelstand_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  test_runner:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pixelstand_test_runner
+    user: "root"
+    volumes:
+      - ./backend:/app:z
+    environment:
+      - DATABASE_URL=postgresql://test_admin:test_password@test_db:5432/test_pixelstand_db
+      - API_KEY=test-api-key-1234
+      - SECRET_KEY=test-secret
+      - JWT_SECRET=test-jwt-secret
+      - SUPER_ADMIN_ID=999999999999999
+      - PYTHONPATH=/app
+    entrypoint: ["/bin/sh", "-c", "export PYTHONDONTWRITEBYTECODE=1 && python -m pip install --no-cache-dir pytest pytest-asyncio && exec \"$@\"", "test_runner"]
+    command: ["pytest", "/app/tests", "-v"]
+    depends_on:
+      test_db:
+        condition: service_healthy

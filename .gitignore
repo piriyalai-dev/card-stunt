@@ -1,0 +1,22 @@
+# env / secrets
+.env
+default_admin_credentials.txt
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# misc
+.DS_Store
+
+# eslint cache
+.eslintcache

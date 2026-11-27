@@ -1,0 +1,299 @@
+@import 'bootstrap-icons/font/bootstrap-icons.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* ฟอนต์หลัก (body) Noto Sans Thai — fallback sans-serif เสมอ กันหลุดไป serif */
+  font-family: 'Noto Sans Thai', Tahoma, Arial, system-ui, -apple-system, sans-serif;
+  /* Accent กลางของระบบ (Cardinal Red) — แทนที่ #dc2626 เดิม */
+  --pixel-accent: #b91c1c;
+  --pixel-accent-strong: #991b1b;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+/* พาดหัว/หัวข้อใหญ่ใช้ Anuphan (จับคู่กับ Landing) — ร่างกายยังเป็น Noto Sans Thai */
+h1,
+h2,
+h3,
+h4,
+h5 {
+  font-family: 'Anuphan', 'Noto Sans Thai', Tahoma, Arial, system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  /* ใช้ font-sans จาก Tailwind config (Noto Sans Thai) + anti-aliasing ตัวหนังสือเรียบ */
+  @apply font-sans antialiased;
+}
+
+/* 🔧 ค่าเริ่มต้นของช่องกรอก — **ไม่ใช้ `!important` แล้ว**
+   ⚠️ เดิมบล็อกนี้บังคับด้วย `!important` ทั้งชุด ⇒ คลาสของ Tailwind อย่าง `bg-canvas`
+      หรือ `border-line` ที่เขียนไว้บน `<input>` **ไม่มีผลเลย** (element selector ที่มี
+      `!important` ชนะ utility class) — อาการคือ "แก้สีช่องกรอกแล้วไม่เปลี่ยน" ซึ่งหาเหตุยากมาก
+   ✅ ตอนนี้เป็นค่า *เริ่มต้น* เฉย ๆ ⇒ หน้าที่ต้องการอย่างอื่นเขียนทับด้วย utility ได้ตามปกติ
+      · specificity ยังชนะ preflight ของ Tailwind (`input` 0,0,1 > `*` 0,0,0) */
+input,
+textarea,
+select {
+  background-color: #ffffff;
+  color: #1c1917; /* stone-900 */
+  border-color: #d6d3d1; /* stone-300 */
+}
+
+/* ♿ ข้อความตัวอย่างในช่องกรอก = `ink-3` (#6B6F76 → 5.05:1 บนขาว)
+   ⚠️ เดิมเป็น stone-400 (#a8a29e) = **2.52:1** — ต่ำกว่า AA และ **ไม่ตรงกับ `.field`**
+      ที่ประกาศ `placeholder:text-ink-3` ไว้แล้ว ⇒ ช่องกรอกที่ใช้ `.field` กับที่ไม่ใช้
+      ได้สี placeholder คนละค่ากัน (R5.3 · R5.5) */
+input::placeholder,
+textarea::placeholder {
+  color: #6b6f76; /* ink-3 */
+}
+
+/* ✨ Focus ring Cardinal Red */
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: #b91c1c;
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.16);
+  outline: none;
+}
+
+/* ✨ Scrollbar (desktop) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6d3d1; /* stone-300 */
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a29e; /* stone-400 */
+}
+
+/* 📱 **ซ่อน scrollbar บนอุปกรณ์สัมผัส** — บนมือถือ scrollbar ไม่ช่วยบอกตำแหน่ง
+   (นิ้วบังอยู่แล้ว) แต่กินเนื้อที่ 8px และโผล่เป็นแถบเทา ๆ กลางการ์ดขาว
+   ⇒ ยังเลื่อนได้ปกติทุกทิศ แค่ไม่มีแถบให้เห็น */
+@media (pointer: coarse) {
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
+/* ✨ tap highlight เลือนบน mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ✨ Card hover — ยกขอบเส้นบาง ๆ แทนการยกกล่อง + เงาฟุ้ง (Civic เรียบ ๆ) */
+.card-hover {
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-1px);
+  border-color: #d6d3d1; /* stone-300 */
+}
+
+/* ===================== คอมโพเนนต์สไตล์กลาง (stone + cardinal, ไร้ gradient/glass) ===================== */
+@layer components {
+  /* การ์ดมาตรฐานของระบบ — hairline border แทนเงา
+     ⚠️ ใช้ `AppCard.vue` สำหรับงานใหม่ · คลาสนี้คงไว้ให้ไฟล์เดิมที่ยังไม่ย้าย */
+  .page-card {
+    @apply bg-surface rounded-card border border-line;
+  }
+  /* ปุ่มหลัก flat cardinal (เดิมเคยเป็น gradient — รีแบรนด์แล้ว)
+     ⚠️ ใช้ `AppButton.vue` สำหรับงานใหม่ · คลาสนี้คงไว้ให้ไฟล์เดิมที่ยังไม่ย้าย */
+  .btn-gradient {
+    @apply inline-flex items-center justify-center gap-1.5 py-2.5 px-4 bg-brand
+           text-white rounded-control font-semibold
+           hover:bg-brand-strong transition-all disabled:opacity-50 disabled:pointer-events-none;
+  }
+  /* ปุ่มรอง (ขอบบาง) */
+  .btn-ghost-ui {
+    @apply inline-flex items-center justify-center gap-1.5 py-2.5 px-4 bg-surface border border-line
+           text-ink-2 rounded-control text-sm font-medium hover:bg-canvas hover:text-ink-1 transition;
+  }
+
+  /* 📝 ช่องกรอกมาตรฐาน — ใช้กับ `<input>`/`<textarea>`/`<select>` ที่ยังไม่ย้ายไปคอมโพเนนต์
+     ⚠️ `text-body` (16px) ไม่ใช่ `text-sm` (14px) โดยเจตนา — iOS Safari **ซูมจอทุกครั้ง**
+        ที่แตะช่องกรอกที่มี font-size < 16px (นั่นคือเหตุผลของ `!important` ที่เคยอยู่ใน
+        `@media (max-width: 640px)` ข้างล่าง ⇒ ถ้าตั้ง 16px ตั้งแต่ต้น ก็ไม่ต้องมีข้อยกเว้น) */
+  .field {
+    @apply w-full rounded-control border border-line bg-surface px-3 py-2.5 text-body text-ink-1
+           placeholder:text-ink-3 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none
+           disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-3;
+  }
+
+  /* ↔️ แถวชิปที่เลื่อนแนวนอนได้ — **ห้ามตัดบรรทัด** (ชิป 2 บรรทัดสูงไม่เท่ากันแล้วแถวกระโดด)
+     ⚠️ `-mx-4 px-4` ทำให้ชิปแรก/สุดท้ายชิดขอบจอพอดีขณะเลื่อน แต่ยังตรงกับเนื้อหาตอนนิ่ง */
+  .chip-row {
+    @apply -mx-4 flex gap-2 overflow-x-auto px-4 py-1;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chip-row::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* 📱 iOS Safari: ป้องกัน auto-zoom ตอนแตะช่องกรอก (ต้อง font-size ≥ 16px บนมือถือ)
+   — ตัว text-sm (14px) ของ Tailwind ทำให้ iOS ซูมจอทุกครั้งที่แตะ input → กันไว้เลย */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* ✨ กันข้อความยาว ๆ (ชื่อ/ลิงก์) ทำให้ layout กว้างเกินจอบนมือถือ */
+.min-w-0-important {
+  min-width: 0 !important;
+}
+
+/* ============================================================
+   ♿ โฟกัสริงกลาง (R5.3) — **ตาข่ายชั้นสุดท้ายที่การันตีว่ามองเห็นได้**
+   ------------------------------------------------------------
+   🔴 **ทำไมต้องมีทั้งที่ Tailwind มี `focus:ring-*` อยู่แล้ว**
+      เพราะมี 54 จุดที่เขียน `focus:outline-none` เพื่อปิดเส้นขอบเริ่มต้นของเบราว์เซอร์
+      แล้วแทนด้วย `focus:ring-2 focus:ring-brand/20` — ริงที่ **จาง 20%** ซึ่งบนพื้นขาว
+      วัดได้ราว 1.3:1 ⇒ "มีริง" แต่ **ตามองไม่เห็น** (และ `outline-none` ที่เขียนคู่กัน
+      ยังกันไม่ให้เบราว์เซอร์วาดเส้นของตัวเองด้วย)
+
+   🔴 **ใช้ `:focus-visible` ไม่ใช่ `:focus`** — ผู้ใช้เมาส์จะไม่เห็นริงเวลาคลิก
+      (พฤติกรรมที่ถูกต้อง) แต่ผู้ใช้คีย์บอร์ด/สวิตช์จะเห็นทุกครั้ง
+   🔴 **`!important` เป็นเจตนา** — `:where()` มี specificity 0 จึงแพ้ utility class ทุกตัว
+      การไม่ใส่ `!important` = ริงนี้จะถูก `focus:outline-none` ปิดเงียบ ๆ ใน 54 จุดนั้น
+      ⇒ นี่เป็นข้อยกเว้นเดียวของเรพที่อนุญาตให้ใช้ `!important` กับสี
+   ⚠️ `outline` เป็นคนละพร็อพกับ `ring` (box-shadow) ⇒ ริงเดิมยังอยู่ ไม่ได้ถูกแทนที่
+      ผลคือโฟกัสได้ทั้งเส้นขอบทึบ 2px (ชัด) และริงจาง ๆ (กลมกลืน) — ตั้งใจ
+   ============================================================ */
+:where(a, button, [role='button'], input, select, textarea, summary,
+       [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 2px solid #b91c1c !important;
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   ♿ `.tap-44` — ขยาย "พื้นที่กด" ให้สูงถึง 44dp โดยไม่ขยายของที่มองเห็น (R5.3)
+   ------------------------------------------------------------
+   ใช้กับคอนโทรลที่ **หน้าตาบังคับให้เล็กกว่า 44dp** และขยายจริงไม่ได้โดยไม่เสียภาพ
+   เช่น สวิตช์เปิด/ปิด (รางสูง 24dp — สวิตช์สูง 44dp หน้าตาไม่ใช่สวิตช์แล้ว)
+
+   🔴 **ขยายแนวตั้งเท่านั้น (`left/right: 0`)** — เจตนา ไม่ใช่ความขี้เกียจ
+      การขยายแนวนอนจะกินพื้นที่ของ *ข้อความข้าง ๆ* (เช่นชื่อขั้นตอนในไทม์ไลน์)
+      และกินพื้นที่ของ *ปุ่มที่อยู่ติดกัน* ⇒ ปุ่มที่มาทีหลังใน DOM จะกลืนคลิกของปุ่มแรก
+      ไปเงียบ ๆ ซึ่งเป็นอาการที่หาสาเหตุยากที่สุดในชุดนี้
+      (กลไกเดียวกับที่ `AppButton` ขนาด `sm` ใช้อยู่แล้ว: `after:inset-x-0 after:-inset-y-1`)
+
+   ⚠️ **ต้องมีที่ว่างเหนือ/ล่างอย่างน้อย (44 − ความสูงจริง)/2 px** ไม่งั้นพื้นที่กดจะไปทับ
+      สิ่งอื่นที่กดได้ — ตรวจด้วยตาก่อนใช้ทุกครั้ง (ปุ่มที่สูง ≥ 44dp อยู่แล้วไม่ต้องใส่)
+   ============================================================ */
+.tap-44 {
+  position: relative;
+}
+.tap-44::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+}
+
+/* ============================================================
+   🗓 ปุ่ม "ล้าง" ของ vue-datepicker (`.dp--clear-btn`) วัดได้ 40×28 (R5.3)
+   ------------------------------------------------------------
+   เป็นคอมโพเนนต์ของไลบรารี ไม่ใช่ markup ของเรา ⇒ แก้ที่คลาสไม่ได้ ต้องทับด้วย CSS
+   ขยาย *พื้นที่กด* อย่างเดียวไม่พอสำหรับปุ่มที่มองเห็นได้ (ต่างจาก `.tap-44`)
+   เพราะปุ่มนี้มีพื้นหลัง/เส้นขอบของตัวเอง ⇒ ต้องขยายกล่องจริง
+   ============================================================ */
+.dp--clear-btn {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* ============================================================
+   🎨 Motion tokens (skeleton / fade / scale) — ลูกบอลเรืองแสงถูกถอดออกแล้ว
+   (คงเฉพาะที่จำเป็น ไม่มี glass gradient แบบเดิม)
+   ============================================================ */
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-floaty {
+  animation: floaty 6s ease-in-out infinite;
+}
+
+/* กัน layout shift: ใส่ container ที่สะท้อนรูปทรงของ element จริง */
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: shimmer 1.8s infinite;
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-scale-in {
+  animation: scaleIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ♿ เคารพผู้ที่ปิดแอนิเมชัน */
+@media (prefers-reduced-motion: reduce) {
+  .animate-floaty,
+  .skeleton-shimmer::after,
+  .animate-fade-up,
+  .animate-scale-in {
+    animation: none !important;
+  }
+  .animate-fade-up,
+  .animate-scale-in {
+    opacity: 1 !important;
+  }
+}
+
+/* 📱 Bottom bar / fixed sheets: กันไม่ให้ติด safe-area ของ iPhone */
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+}
+
+/* 📱 จอเต็มพื้นที่ (หน้าสแกนเช็คอิน): กันหัวแถบทับรอยบาก/นาฬิกา
+   ⚠️ ด้านบนเว้นแค่ 0.5rem (ไม่ใช่ 0.75rem เท่า `.pb-safe`) — ด้านล่างเป็นปุ่มที่ต้อง
+      เอานิ้วจิ้มจึงต้องการช่องไฟมากกว่า ส่วนด้านบนเป็นแถบข้อมูลที่แค่วางไม่ทับรอยบากก็พอ
+   📐 `index.html` ตั้ง `viewport-fit=cover` ไว้แล้ว ⇒ `env()` คืนค่าจริงบน iOS
+      (ถ้าไม่มีบรรทัดนั้น ทุกค่าจะเป็น 0 เงียบ ๆ ⇒ แถบทับรอยบากโดยไม่มีใครรู้) */
+.pt-safe {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+}

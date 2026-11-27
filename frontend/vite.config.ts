@@ -1,0 +1,60 @@
+import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath, URL } from 'node:url'
+
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import vueJsx from '@vitejs/plugin-vue-jsx'
+import vueDevTools from 'vite-plugin-vue-devtools'
+
+/**
+ * รหัสของ build นี้ — ใช้ต่อท้าย URL ของ service worker (`/sw.js?v=<id>`)
+ *
+ * ⚠️ **จำเป็น ไม่ใช่ของประดับ** — Cloudflare แทนที่ `Cache-Control` จาก origin
+ *    ด้วย `max-age=14400` ของตัวเอง ⇒ `/sw.js` ตรง ๆ ค้างได้ถึง 4 ชม. แม้ nginx
+ *    จะส่ง `no-cache, must-revalidate` (ดู docs/skills.md) การเปลี่ยน URL ทุก build
+ *    ทำให้ CDN ไม่มี URL เก่าให้เสิร์ฟ ⇒ SW อัปเดตถึงมือผู้ใช้เสมอ
+ */
+function buildId(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim()
+  } catch {
+    // ไม่มี git (เช่น build จาก tarball) — ใช้นาฬิกาแทน ดีกว่าได้ค่าเดียวกันตลอด
+    return String(Date.now())
+  }
+}
+
+/**
+ * เลขเวอร์ชันของแอป — อ่านจาก `package.json` ซึ่ง `release.sh` เป็นคน sync
+ * ใช้ `readFileSync` ไม่ใช่ `import pkg from './package.json'` เพราะ tsconfig
+ * ของ config ไม่ได้เปิด `resolveJsonModule`
+ *
+ * ⚠️ ไม่ใช้ `__BUILD_ID__` แทนค่านี้ — build context ของ frontend คือ `./frontend`
+ *    ที่ไม่มี `.git` ⇒ ใน Docker มันตกไปคืน `Date.now()` ไม่ใช่ commit SHA
+ */
+const pkg = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
+) as { version: string }
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [
+    vue(),
+    vueJsx(),
+    vueDevTools(),
+  ],
+  define: {
+    __BUILD_ID__: JSON.stringify(buildId()),
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url))
+    },
+  },
+  server: {
+    // TODO: ใส่ domain ของโปรเจค PIRIvoice เมื่อ deploy (เพิ่มที่ allowedHosts)
+  }
+})

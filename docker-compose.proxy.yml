@@ -1,0 +1,33 @@
+# ⚠️ REFERENCE เท่านั้น — ห้ามรัน
+# card-stunt **แชร์** Traefik (global_proxy) ที่มีอยู่แล้วบนเครื่องนี้
+# ไม่ต้องรัน setup_traefik.sh ซ้ำ และไม่ deploy stack proxy ตัวนี้
+# (เก็บไว้เป็นเอกสารอ้างอิงว่า traefik ที่แชร์อยู่ตั้งค่าอะไรบ้าง)
+
+version: "3.8"
+
+services:
+  traefik:
+    image: traefik:latest
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=traefik-public"
+      - "--providers.docker.swarmModeRefreshSeconds=15"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - traefik-public
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: any
+
+networks:
+  traefik-public:
+    external: true
