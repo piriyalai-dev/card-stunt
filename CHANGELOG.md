@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased] — Phase 4 Frontend Admin + Engine
+## [Unreleased] — ยังไม่ตัดเวอร์ชัน
+
+## [0.3.0] — 2026-11-28 — Phase 4 Frontend Admin + Engine
 
 ### Phase 4 — Frontend Admin + Engine (2026-11-27)
 
@@ -32,6 +34,7 @@
 
 **Migration:** `001_init_auth` — DB schema เริ่มจาก `core/init_db.py` (users)
 
-[Unreleased]: https://github.com/piriyalai-dev/card-stunt/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/piriyalai-dev/card-stunt/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/piriyalai-dev/card-stunt/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/piriyalai-dev/card-stunt/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/piriyalai-dev/card-stunt/compare/84bf061...v0.1.0
