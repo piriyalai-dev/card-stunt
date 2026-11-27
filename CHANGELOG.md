@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] — Fix blank SUPER_ADMIN_ID crash
+## [Unreleased] — Deploy hotfixes: SUPER_ADMIN_ID + API domain
 
 ### Fix (2026-11-28)
 
@@ -8,6 +8,12 @@
   → backend container crash-loop ตอน deploy แรก · เพิ่ม validator แปลงค่าว่างเป็น `0`
   และปรับ `.env.example` เป็น `SUPER_ADMIN_ID=0`
 - Tests: regression สำหรับค่าว่าง/ค่าปกติ + CORS default
+
+### API domain (2026-11-28)
+
+- เปลี่ยน API host → `pixel-api.singto1597.xyz` (traefik Host rule + `VITE_API_BASE_URL`)
+  — frontend ต้อง rebuild เพราะ URL ถูก bake ลง bundle
+- CORS ยังอนุญาต origin ของ frontend `https://pixel.singto1597.xyz` (ไม่เปลี่ยน)
 
 **Migration:** ไม่มี migration ใหม่
 
