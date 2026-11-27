@@ -1,6 +1,41 @@
 # Changelog
 
-## [Unreleased] — Deploy hotfixes: SUPER_ADMIN_ID + API domain
+## [Unreleased] — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
+
+### Phase 5 — Student Viewer PWA (2026-11-27)
+
+- `/e/:slug` → 3 โหมด: seat picker (dropdown + ผังแสตน + ค้นหาเลขประจำตัว) → cue list (ทุกฉาก + เพลท 5×5) → focus/show mode
+- Focus mode: กล่องสีใหญ่ + รหัสยักษ์ + ชื่อสี · next-cue preview · ปัด/ลูกศร · jump ฉาก · Screen Wake Lock · ตามคิวสด (SSE) ปิดได้
+- Offline-first: cache meta/seat/selection ใน `localStorage` · เปิดออฟไลน์กลางสนามได้ · เช็คเวอร์ชันทุก 60 วิ + ตอนกลับมา online
+- PWA manifest `start_url=/e` (กลับงานล่าสุด) · หน้า `/e` ไม่มี slug เปิดจาก home screen ได้
+- Public API: `GET /public/events/{slug}/seat?student_code=` (ต้องเปิด `roster_lookup_enabled`) · meta เพิ่มสี `id`, ทิศทางแสตน, notes
+- ความเป็นส่วนตัว: `seat?row&col` แสดงชื่อนักเรียนเฉพาะเมื่อเปิด `roster_lookup_enabled`
+
+### Phase 5 — ARQ export worker (2026-11-27)
+
+- `POST /events/{id}/exports` → คิว `pixelstand:queue:export` → worker สร้าง PDF/CSV/ZIP
+- PDF: การ์ดโพยรายที่นั่ง 4 ใบ/A4 (Pillow + Raqm shaping ฟอนต์ไทย `Noto Sans Thai`)
+- CSV: ทุกที่นั่ง × ฉาก (ด้าน A/B · รหัสสีทั้ง 25 ช่อง) · ZIP: ภาพกริดทุกฉาก + `seats.csv` + `manifest.json`
+- `GET /events/{id}/exports` · `GET /exports/{id}/download` (FileResponse) · `POST /exports/{id}/retry`
+- Compose: service `worker` + volume `pixelstand_export_data` · `arq==0.26.3`
+
+### Phase 5 — Media signed URL (2026-11-27)
+
+- `GET /api/v1/stunts/{id}/media-urls` → HMAC-signed URL (path + exp, TTL 15 นาที)
+- `GET /api/v1/media/<path>?exp=&sig=` — `<img>` ใช้ได้โดยไม่แนบ Bearer · กัน path traversal
+- Pixel Studio โหลดภาพอ้างอิงที่บันทึกไว้กลับมาเป็น overlay (`crossOrigin=anonymous` กัน canvas taint)
+
+### Phase 5 — Admin staff tools (2026-11-27)
+
+- แท็บ `event-exports` (สิทธิ์ `EXPORT`): import รายชื่อ CSV/XLSX · ตารางค้นหา/ลบ · สร้าง export + poll สถานะ + ดาวน์โหลด/ลองใหม่
+- แท็บ `event-live` (สิทธิ์ `CONTROL_LIVE`): next/prev/goto · รายการฉาก published + LIVE badge
+- `GET /events/{id}/live` สำหรับหน้า admin (บังคับ `CONTROL_LIVE`)
+
+### Phase 5 — Docs + Playwright E2E (2026-11-27)
+
+- Docs 4 เล่ม: user guide · staff operations · admin guide · developer playbook
+- Playwright (`frontend/e2e/`) mock API: viewer (เลือกที่นั่ง/ค้นหา/โฟกัส/ออฟไลน์) + export center (poll จนเสร็จ) + live control
+- Tests: backend 88 · frontend vitest 91 · Playwright 5
 
 ### Fix (2026-11-28)
 

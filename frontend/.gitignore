@@ -5,3 +5,8 @@ dist-ssr/
 public/docs/
 
 .eslintcache
+
+# playwright
+test-results/
+playwright-report/
+blob-report/
