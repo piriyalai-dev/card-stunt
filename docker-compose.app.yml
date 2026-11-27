@@ -10,6 +10,11 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pixelstand_infra_db:5432/${POSTGRES_DB}
+      # ⚠️ .env ใช้ localhost สำหรับรันบน host — ใน container ต้องชี้ service ของ infra stack
+      - REDIS_URL=redis://pixelstand_infra_redis:6379/1
+    volumes:
+      # reference image/thumbnail — persist ข้าม redeploy (Phase 5 จะมี signed URL)
+      - media_data:/data/media
     networks:
       - pixelstand-internal
       - traefik-public
@@ -49,6 +54,10 @@ services:
         - "traefik.http.routers.pixelstand_frontend.rule=Host(`${WEB_DOMAIN}`)"
         - "traefik.http.services.pixelstand_frontend.loadbalancer.server.port=80"
         - "traefik.docker.network=traefik-public"
+
+volumes:
+  media_data:
+    name: pixelstand_media_data
 
 networks:
   traefik-public:

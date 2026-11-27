@@ -17,7 +17,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app
+# /data/media ต้องมีอยู่และเป็นของ appuser ก่อน mount named volume
+# (Docker จะ copy ownership ของ mountpoint ลง volume เปล่าให้)
+RUN adduser --disabled-password --gecos "" appuser && \
+    mkdir -p /data/media && \
+    chown -R appuser /app /data
 USER appuser
 
 COPY --chown=appuser:appuser . .

@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 days
 
+    # CORS — origin ของ frontend ที่อนุญาตให้เรียก API (คั่นด้วย comma)
+    # ค่าเริ่มต้นรวม dev server + โดเมนจริงของเครื่องนี้ (override ได้ผ่าน .env)
+    CORS_ORIGINS: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "https://pixel.singto1597.xyz,http://pixel.singto1597.xyz"
+    )
+
     # Seed users — ไฟล์เก็บ username + รหัสชั่วคราว (บังคับเปลี่ยนตอน login ครั้งแรก)
     SEED_CREDENTIALS_FILE: str = "default_admin_credentials.txt"
 

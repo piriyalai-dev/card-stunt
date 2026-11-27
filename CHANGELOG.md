@@ -1,6 +1,15 @@
 # Changelog
 
-## [Unreleased] — ยังไม่ตัดเวอร์ชัน
+## [Unreleased] — Deploy wiring: CORS + Redis + media volume
+
+### Deploy wiring (2026-11-28)
+
+- Backend: `CORS_ORIGINS` (config/env) แทน hardcode localhost — frontend ที่ `pixel.singto1597.xyz` เรียก API `api.pixel.singto1597.xyz` ได้
+- Compose: backend `REDIS_URL` ชี้ `pixelstand_infra_redis:6379/1` ใน container + named volume `pixelstand_media_data` สำหรับ reference image
+- Dockerfile: สร้าง `/data/media` เป็นของ `appuser` (named volume สืบทอด ownership)
+- Tests: pytest preflight CORS (prod/dev ผ่าน, origin แปลกปลอมไม่ผ่าน)
+
+**Migration:** ไม่มี migration ใหม่ — เตรียมความพร้อม deploy เท่านั้น
 
 ## [0.3.0] — 2026-11-28 — Phase 4 Frontend Admin + Engine
 
