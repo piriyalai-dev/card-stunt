@@ -53,6 +53,25 @@ PREV="$(git tag --list 'v*' --sort=-v:refname | head -1)"
 [ -n "$PREV" ] || die "ไม่พบ tag ก่อนหน้า — สร้าง v0.1.0 ย้อนหลังก่อน (ดู docs/4-developer-playbook/versioning-and-releases.md)"
 ok "tag ก่อนหน้า: $PREV"
 
+# ตรวจว่าเลขเดินหน้าถูกขั้น (major/minor/patch) — เหมือน pirivoice
+CURRENT="$(tr -d '[:space:]' < VERSION)"
+[ "$CURRENT" = "${PREV#v}" ] || die "VERSION ($CURRENT) ไม่ตรงกับ tag ล่าสุด ($PREV)"
+BUMP=""
+if [ "$IS_RC" = "0" ]; then
+    IFS=. read -r MA MI PA <<< "$VERSION"
+    IFS=. read -r PMA PMI PPA <<< "${PREV#v}"
+    if [ "$MA" -eq $((PMA + 1)) ] && [ "$MI" -eq 0 ] && [ "$PA" -eq 0 ]; then
+        BUMP=major
+    elif [ "$MA" -eq "$PMA" ] && [ "$MI" -eq $((PMI + 1)) ] && [ "$PA" -eq 0 ]; then
+        BUMP=minor
+    elif [ "$MA" -eq "$PMA" ] && [ "$MI" -eq "$PMI" ] && [ "$PA" -eq $((PPA + 1)) ]; then
+        BUMP=patch
+    else
+        die "เลขเวอร์ชันต้องเดินทีละขั้นจาก $PREV: minor=$PMA.$((PMI+1)).0, patch=$PMA.$PMI.$((PPA+1)), major=$((PMA+1)).0.0"
+    fi
+    ok "เวอร์ชัน $VERSION (bump=$BUMP)"
+fi
+
 if [ "$REFS_GIVEN" = "0" ]; then
     DETECTED="$(git log --format=%s "$PREV..HEAD" | grep -oE 'Merge pull request #[0-9]+|\(#[0-9]+\)$' | grep -oE '[0-9]+' | sort -n -u | awk 'function flush(){if(!s)return;if(o++)printf ",";printf "PR #%d",s;if(l>s)printf "-#%d",l;s=0}{if(!s){s=l=$1;next}if($1==l+1){l=$1;next}flush();s=l=$1}END{flush();print ""}' || true)"
     if [ -n "$DETECTED" ]; then REFS="$DETECTED"; ok "ตรวจพบ PR: $REFS"; fi
@@ -124,7 +143,6 @@ open(p, "w", encoding="utf-8").write(new)
 PY
     ( cd frontend && npm version "$VERSION" --no-git-tag-version --allow-same-version >/dev/null )
     ok "VERSION · config.py · package.json · package-lock.json = $VERSION"
-    BUMP="$(printf '%s' "$VERSION" | awk -F. '{print $2}')"
     printf '%s\t%s\tRELEASE\t%s\t%s\t%s\n' "$VERSION" "$DATE" "$BUMP" "$TITLE" "$REFS" >> scripts/version-manifest.tsv
     step "preflight manifest"
     node scripts/version-manifest.mjs --preflight
