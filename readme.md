@@ -59,5 +59,5 @@ docker stack deploy -c docker-compose.infra.yml pixelstand_infra
 IMAGE_TAG=$(git rev-parse --short HEAD) docker stack deploy -c docker-compose.app.yml pixelstand_app
 ```
 
-Traefik (`global_proxy`) ที่แชร์อยู่บนเครื่องจะ route `pixel.pirivoice.com` ตาม labels ใน `docker-compose.app.yml`
-(ยัง HTTP — HTTPS / ACME ตาม design report §12 "ใช้ HTTP ก่อน")
+Traefik (`global_proxy`) ที่แชร์อยู่บนเครื่องจะ route `pixel.singto1597.xyz` (เครื่องนี้) ตาม labels ใน `docker-compose.app.yml`
+(ยัง HTTP — HTTPS / ACME ตาม design report §12 "ใช้ HTTP ก่อน"; `pixel.pirivoice.com` จะไปทำบนเซิร์ฟเวอร์ pirivoice ทีหลัง)
