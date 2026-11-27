@@ -58,6 +58,18 @@ const router = createRouter({
               component: () => import('@/views/admin/StuntManager.vue'),
               meta: { requiresAuth: true, requiresPermission: 'MANAGE_STUNTS' },
             },
+            {
+              path: 'live',
+              name: 'event-live',
+              component: () => import('@/views/admin/LiveControl.vue'),
+              meta: { requiresAuth: true, requiresPermission: 'CONTROL_LIVE' },
+            },
+            {
+              path: 'exports',
+              name: 'event-exports',
+              component: () => import('@/views/admin/ExportCenter.vue'),
+              meta: { requiresAuth: true, requiresPermission: 'EXPORT' },
+            },
           ],
         },
         {
@@ -81,8 +93,9 @@ const router = createRouter({
       ],
     },
     {
-      // โหมดนักเรียน (public) — Phase 5 จะมี seat picker / cue list / focus mode
-      path: '/e/:slug',
+      // โหมดนักเรียน (public) — slug เป็น optional เพื่อให้ PWA ที่ติดตั้งแล้วเปิด `/e`
+      // แล้วกลับไปงานล่าสุดจาก localStorage ได้ (ดู StudentViewer)
+      path: '/e/:slug?',
       name: 'viewer',
       component: () => import('@/views/viewer/StudentViewer.vue'),
       meta: { requiresAuth: false },
