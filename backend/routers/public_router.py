@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from core.config import settings
 from core.dependencies import get_db_pool
+from core.exceptions import ValidationError
 from core.live_stream import hub
 from services import public_service, live_service
 from routers._common import map_err
@@ -24,11 +25,19 @@ async def meta(slug: str, request: Request, pool: asyncpg.Pool = Depends(get_db_
 
 
 @router.get("/{slug}/seat")
-async def seat(slug: str, row: int = Query(..., ge=1), col: int = Query(..., ge=1),
-               stand_id: int | None = Query(None), request: Request = None,
+async def seat(slug: str, request: Request,
+               row: int | None = Query(None, ge=1), col: int | None = Query(None, ge=1),
+               stand_id: int | None = Query(None),
+               student_code: str | None = Query(None),
                pool: asyncpg.Pool = Depends(get_db_pool)):
+    """เลือกที่นั่งได้ 2 ทาง: row+col (1-based) หรือ student_code (ถ้า event เปิด roster lookup)."""
     try:
-        body, etag, max_age = await public_service.seat(pool, slug, row, col, stand_id)
+        if student_code:
+            body, etag, max_age = await public_service.seat_by_student_code(pool, slug, student_code)
+        elif row is not None and col is not None:
+            body, etag, max_age = await public_service.seat(pool, slug, row, col, stand_id)
+        else:
+            raise ValidationError("ต้องระบุ row+col หรือ student_code")
     except Exception as e:
         raise map_err(e)
     return public_service.respond_cached(body, etag, max_age, request.headers.get("if-none-match"))

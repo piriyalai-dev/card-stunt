@@ -2,6 +2,7 @@ import json
 
 import asyncpg
 
+from core import media
 from core.config import settings
 from core.exceptions import ConflictError, NotFoundError, ValidationError
 from core.logger import AuditLogger
@@ -33,6 +34,21 @@ async def list_stunts(pool: asyncpg.Pool, event_id: int) -> list:
             event_id,
         )
         return [_out(dict(r)) for r in rows]
+
+
+async def media_urls(pool: asyncpg.Pool, stunt_id: int) -> dict:
+    """Signed URL ของ reference image + thumbnail (หมดอายุตาม MEDIA_SIGNED_TTL_SECONDS)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT reference_image_path, thumbnail_path FROM stunts"
+            " WHERE id = $1 AND deleted_at IS NULL", stunt_id,
+        )
+        if not row:
+            raise NotFoundError("ไม่พบ stunt")
+    return {
+        "reference_url": media.signed_url(row["reference_image_path"]),
+        "thumbnail_url": media.signed_url(row["thumbnail_path"]),
+    }
 
 
 async def get_stunt(pool: asyncpg.Pool, stunt_id: int):
@@ -327,7 +343,6 @@ async def restore_revision(pool: asyncpg.Pool, actor_id: int, stunt_id: int, rev
 
 
 async def upload_reference(pool: asyncpg.Pool, actor_id: int, stunt_id: int, content: bytes, filename: str) -> dict:
-    from core import media
     stunt = await get_stunt(pool, stunt_id)
     paths = await media.save_reference(stunt_id, content, filename)
     async with pool.acquire() as conn:

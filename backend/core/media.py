@@ -5,8 +5,13 @@
 - thumbnail เก็บที่ `MEDIA_STORAGE_DIR/stunts/<id>/thumb.webp` (WebP, max 480)
 - เขียนแบบ atomic (tmp → os.replace) + ตรวจ MIME/ขนาดด้วย Pillow + path containment
 """
+import base64
+import hashlib
+import hmac
 import os
+import time
 import uuid
+from urllib.parse import quote
 
 from core.config import settings
 from core.exceptions import PayloadTooLargeError, ValidationError
@@ -102,6 +107,41 @@ def _safe_path_from_rel(rel_path: str) -> str:
     if not path.startswith(root + os.sep):
         raise ValidationError("path ออกจาก media root")
     return path
+
+
+# ── signed URL (HMAC) ───────────────────────────────────────────────
+# ทำไมต้องมี: `<img src="...">` แนบ `Authorization: Bearer` ไม่ได้ ⇒ ถ้าใช้ endpoint
+# ที่ต้อง auth ภาพจะโหลดไม่ขึ้นในเบราว์เซอร์ · การแนบ JWT ไปใน query ก็เสี่ยงหลุดใน log
+# ⇒ ใช้โทเคนสั้นที่ลงนามด้วย SECRET_KEY และผูกกับ path + เวลาหมดอายุ
+
+def _signature(rel_path: str, expires_at: int) -> str:
+    msg = f"{rel_path}\n{expires_at}".encode()
+    digest = hmac.new(settings.SECRET_KEY.encode(), msg, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
+
+
+def signed_url(rel_path: str | None, ttl: int | None = None) -> str | None:
+    """สร้าง URL สำหรับ `<img>` — คืน None ถ้าไม่มีไฟล์."""
+    if not rel_path:
+        return None
+    expires_at = int(time.time()) + (ttl or settings.MEDIA_SIGNED_TTL_SECONDS)
+    sig = _signature(rel_path, expires_at)
+    return (
+        f"/api/v1/media/{quote(rel_path, safe='/')}"
+        f"?exp={expires_at}&sig={quote(sig)}"
+    )
+
+
+def verify_signed_path(rel_path: str, expires_at: int, sig: str) -> str:
+    """ตรวจ signature + อายุ แล้วคืน absolute path (raise ValidationError ถ้าไม่ผ่าน)."""
+    if not rel_path or not sig:
+        raise ValidationError("ลิงก์ไฟล์ไม่ครบ")
+    if expires_at < int(time.time()):
+        raise ValidationError("ลิงก์ไฟล์หมดอายุ")
+    expected = _signature(rel_path, int(expires_at))
+    if not hmac.compare_digest(expected, sig):
+        raise ValidationError("ลายเซ็นไฟล์ไม่ถูกต้อง")
+    return resolve_relative(rel_path)
 
 
 def delete_stunt_files(stunt_id: int) -> None:

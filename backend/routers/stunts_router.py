@@ -38,6 +38,15 @@ async def delete_stunt(stunt_id: int, user_ctx: dict = Depends(get_current_user)
         raise map_err(e)
 
 
+@router.get("/{stunt_id}/media-urls", response_model=dict)
+async def media_urls(stunt_id: int, user_ctx: dict = Depends(get_current_user), pool: asyncpg.Pool = Depends(get_db_pool)):
+    ensure_user(user_ctx)
+    try:
+        return await stunts_service.media_urls(pool, stunt_id)
+    except Exception as e:
+        raise map_err(e)
+
+
 @router.get("/{stunt_id}/grid", response_model=GridOut)
 async def get_grid(stunt_id: int, user_ctx: dict = Depends(get_current_user), pool: asyncpg.Pool = Depends(get_db_pool)):
     ensure_user(user_ctx)

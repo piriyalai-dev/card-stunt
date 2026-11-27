@@ -45,6 +45,7 @@ async def _build_meta(conn, ev) -> dict:
         stands.append({
             "id": s["id"], "name": s["name"], "rows": s["rows"], "cols": s["cols"],
             "sub_rows": s["sub_rows"], "sub_cols": s["sub_cols"],
+            "row_direction": s["row_direction"], "col_direction": s["col_direction"],
             "row_label_style": s["row_label_style"], "col_label_style": s["col_label_style"],
             "row_label_prefix": s["row_label_prefix"], "col_label_prefix": s["col_label_prefix"],
             "blocked_seats": _jsonb(s["blocked_seats"]),
@@ -55,9 +56,10 @@ async def _build_meta(conn, ev) -> dict:
         "SELECT id, name FROM palettes WHERE event_id = $1 AND deleted_at IS NULL ORDER BY id", ev["id"],
     ):
         colors = [
-            {"code": c["code"], "name_th": c["name_th"], "hex": c["hex"], "text_color": c["text_color"]}
+            {"id": c["id"], "code": c["code"], "name_th": c["name_th"],
+             "hex": c["hex"], "text_color": c["text_color"]}
             for c in await conn.fetch(
-                "SELECT code, name_th, hex, text_color FROM palette_colors"
+                "SELECT id, code, name_th, hex, text_color FROM palette_colors"
                 " WHERE palette_id = $1 AND deleted_at IS NULL ORDER BY order_index, id", p["id"],
             )
         ]
@@ -76,6 +78,8 @@ async def _build_meta(conn, ev) -> dict:
 
     return {
         "slug": ev["slug"], "name": ev["name"], "published_version": ev["published_version"],
+        "roster_lookup_enabled": ev["roster_lookup_enabled"],
+        "event_date": ev["event_date"].isoformat() if ev["event_date"] else None,
         "stands": stands, "palettes": palettes, "stunts": stunts,
         "live": {
             "stunt_id": ev["live_stunt_id"], "stunt_index": idx, "total": len(stunts),
@@ -108,6 +112,45 @@ async def seat(pool: asyncpg.Pool, slug: str, row: int, col: int, stand_id=None)
         return body, cache.etag_for(body), settings.CACHE_SEAT_TTL_SECONDS
 
 
+async def seat_by_student_code(pool: asyncpg.Pool, slug: str, student_code: str):
+    """ค้นที่นั่งจากเลขประจำตัว — ต้องเปิด `roster_lookup_enabled` ของ event."""
+    code = (student_code or "").strip()
+    if not code:
+        raise ValidationError("กรุณากรอกเลขประจำตัว")
+    async with pool.acquire() as conn:
+        ev = await _get_public_event(conn, slug)
+        if not ev["roster_lookup_enabled"]:
+            raise NotFoundError("event นี้ปิดการค้นหาด้วยเลขประจำตัว")
+        roster = await conn.fetchrow(
+            "SELECT stand_id, row_index, col_index FROM seat_rosters"
+            " WHERE event_id = $1 AND LOWER(student_code) = LOWER($2) AND deleted_at IS NULL"
+            " ORDER BY id LIMIT 1",
+            ev["id"], code,
+        )
+        if not roster:
+            raise NotFoundError("ไม่พบเลขประจำตัวนี้ในงาน")
+
+        stand = await conn.fetchrow(
+            "SELECT * FROM stands WHERE id = $1 AND event_id = $2 AND deleted_at IS NULL",
+            roster["stand_id"], ev["id"],
+        )
+        if not stand:
+            raise NotFoundError("ไม่พบ stand ของที่นั่งนี้")
+        g = StandGeometry(rows=stand["rows"], cols=stand["cols"], sub_rows=stand["sub_rows"],
+                          sub_cols=stand["sub_cols"], row_direction=stand["row_direction"],
+                          col_direction=stand["col_direction"])
+        r0, c0 = roster["row_index"], roster["col_index"]
+        if is_blocked(r0, c0, _jsonb(stand["blocked_seats"])):
+            raise NotFoundError("ที่นั่งนี้เป็นช่องปิด")
+
+        key = cache.cache_key(slug, ev["version"], "seat-code", str(stand["id"]), code.lower())
+        body = await cache.get_json(key)
+        if body is None:
+            body = await _build_seat(conn, ev, stand, g, r0, c0)
+            await cache.set_json(key, body, settings.CACHE_SEAT_TTL_SECONDS)
+        return body, cache.etag_for(body), settings.CACHE_SEAT_TTL_SECONDS
+
+
 async def _resolve_stand(conn, event_id, stand_id):
     if stand_id:
         s = await conn.fetchrow(
@@ -128,25 +171,31 @@ async def _build_seat(conn, ev, stand, g, r0, c0) -> dict:
     rl, sl = seat_labels(r0, c0, g, stand["row_label_style"], stand["col_label_style"],
                          stand["row_label_prefix"], stand["col_label_prefix"])
     student = None
-    roster = await conn.fetchrow(
-        "SELECT student_code, student_name FROM seat_rosters WHERE stand_id = $1 AND row_index = $2"
-        " AND col_index = $3 AND deleted_at IS NULL", stand["id"], r0, c0,
-    )
-    if roster:
-        student = {"student_code": roster["student_code"], "student_name": roster["student_name"]}
+    # 🔒 แสดงข้อมูลนักเรียนเฉพาะเมื่อ event เปิด roster_lookup — endpoint seat เปิดให้ everyone
+    #    ถ้าไม่ gate จะเท่ากับเปิดรายชื่อทั้งแสตนให้ใครก็ดึงได้ด้วยการยิง row/col ไล่ทีละช่อง
+    if ev["roster_lookup_enabled"]:
+        roster = await conn.fetchrow(
+            "SELECT student_code, student_name FROM seat_rosters WHERE stand_id = $1 AND row_index = $2"
+            " AND col_index = $3 AND deleted_at IS NULL", stand["id"], r0, c0,
+        )
+        if roster:
+            student = {"student_code": roster["student_code"], "student_name": roster["student_name"]}
 
     stunts = []
+    # ⚠️ ต้องกรอง stand_id ด้วย — งานที่มีหลายแสตน แต่ละแสตนมีฉากของตัวเอง
+    #    ถ้าไม่กรอง ที่นั่งจะเห็นฉากของแสตนอื่นด้วย (และเพลทอาจถูก extract ผิดกริด)
     for s in await conn.fetch(
-        "SELECT id, code, title, grid_width, grid_height, grid_data_a, grid_data_b FROM stunts"
-        " WHERE event_id = $1 AND deleted_at IS NULL AND status = 'published' ORDER BY order_index, id",
-        ev["id"],
+        "SELECT id, code, title, notes, grid_width, grid_height, grid_data_a, grid_data_b FROM stunts"
+        " WHERE event_id = $1 AND stand_id = $2 AND deleted_at IS NULL AND status = 'published'"
+        " ORDER BY order_index, id",
+        ev["id"], stand["id"],
     ):
         a = _jsonb(s["grid_data_a"])
         b = _jsonb(s["grid_data_b"])
         plate_a = extract_plate(a, g, r0, c0) if len(a) == s["grid_width"] * s["grid_height"] else None
         plate_b = extract_plate(b, g, r0, c0) if len(b) == s["grid_width"] * s["grid_height"] else None
         stunts.append({
-            "id": s["id"], "code": s["code"], "title": s["title"],
+            "id": s["id"], "code": s["code"], "title": s["title"], "notes": s["notes"],
             "side_a": plate_a, "side_b": plate_b,
         })
 

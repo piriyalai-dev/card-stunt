@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # /data/media ต้องมีอยู่และเป็นของ appuser ก่อน mount named volume
 # (Docker จะ copy ownership ของ mountpoint ลง volume เปล่าให้)
 RUN adduser --disabled-password --gecos "" appuser && \
-    mkdir -p /data/media && \
+    mkdir -p /data/media /data/exports && \
     chown -R appuser /app /data
 USER appuser
 

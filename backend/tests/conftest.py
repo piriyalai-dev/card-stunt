@@ -27,6 +27,8 @@ settings.SEED_CREDENTIALS_FILE = os.path.join(
 )
 # media ลง temp dir — กันเขียนลง /data/media ของ container
 settings.MEDIA_STORAGE_DIR = tempfile.mkdtemp(prefix="pixel_media_test_")
+# export ลง temp dir — กันเขียนลง /data/exports ของ container
+settings.EXPORT_STORAGE_DIR = tempfile.mkdtemp(prefix="pixel_export_test_")
 
 _TABLES = (
     "users", "events", "stands", "palettes", "palette_colors", "stunts",

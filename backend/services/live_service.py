@@ -5,6 +5,13 @@ from core.logger import AuditLogger
 from core.rbac import require_permission
 
 
+async def get_live_state_for_control(pool: asyncpg.Pool, actor_id: int, event_id: int) -> dict:
+    """เหมือน `get_live_state` แต่บังคับสิทธิ์ CONTROL_LIVE (สำหรับหน้า admin)"""
+    async with pool.acquire() as conn:
+        await require_permission(conn, actor_id, "CONTROL_LIVE")
+    return await get_live_state(pool, event_id)
+
+
 async def get_live_state(pool: asyncpg.Pool, event_id: int) -> dict:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(

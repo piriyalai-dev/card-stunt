@@ -41,11 +41,18 @@ class Settings(BaseSettings):
     CACHE_META_TTL_SECONDS: int = 300
     CACHE_SEAT_TTL_SECONDS: int = 60
 
-    # Media — reference image + thumbnail (signed URL/media เต็มมา Phase 5)
+    # Media — reference image + thumbnail
+    # served ผ่าน signed URL (HMAC) เพื่อให้ `<img src>` ใช้ได้โดยไม่ต้องแนบ Bearer token
     MEDIA_STORAGE_DIR: str = "/data/media"
     MEDIA_MAX_UPLOAD_MB: int = 10
     MEDIA_MAX_DIMENSION: int = 10000
     MEDIA_THUMB_DIMENSION: int = 480
+    MEDIA_SIGNED_TTL_SECONDS: int = 900
+
+    # Export — ไฟล์ PDF/CSV/ZIP ที่ ARQ worker สร้าง (relative path เก็บใน export_jobs.file_path)
+    EXPORT_STORAGE_DIR: str = "/data/exports"
+    EXPORT_MAX_AGE_DAYS: int = 7
+    EXPORT_MAX_SEATS_PDF: int = 5000
 
     # Stunt revisions — เก็บ full snapshot ต่อครั้ง กันไม่ให้โตเกิน (design §11)
     REVISION_RETENTION: int = 20

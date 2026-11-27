@@ -15,6 +15,15 @@ class AdvanceRequest(BaseModel):
     stunt_id: Optional[int] = None
 
 
+@router.get("/{event_id}/live")
+async def get_live(event_id: int, user_ctx: dict = Depends(get_current_user), pool: asyncpg.Pool = Depends(get_db_pool)):
+    uid = ensure_user(user_ctx)
+    try:
+        return await live_service.get_live_state_for_control(pool, uid, event_id)
+    except Exception as e:
+        raise map_err(e)
+
+
 @router.post("/{event_id}/live/advance")
 async def advance(event_id: int, req: AdvanceRequest, user_ctx: dict = Depends(get_current_user), pool: asyncpg.Pool = Depends(get_db_pool)):
     uid = ensure_user(user_ctx)

@@ -175,6 +175,16 @@ async def import_roster(event_id: int, stand_id: int = Form(...), file: UploadFi
 
 # ── exports (nested ใต้ event) ─────────────────────────────────────
 
+@router.get("/{event_id}/exports", response_model=list[ExportOut])
+async def list_exports(event_id: int, limit: int = 100,
+                       user_ctx: dict = Depends(get_current_user), pool: asyncpg.Pool = Depends(get_db_pool)):
+    uid = ensure_user(user_ctx)
+    try:
+        return await exports_service.list_exports(pool, uid, event_id, limit)
+    except Exception as e:
+        raise map_err(e)
+
+
 @router.post("/{event_id}/exports", response_model=ExportOut)
 async def create_export(event_id: int, req: ExportCreate, user_ctx: dict = Depends(get_current_user), pool: asyncpg.Pool = Depends(get_db_pool)):
     uid = ensure_user(user_ctx)
