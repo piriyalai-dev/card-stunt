@@ -1,0 +1,7 @@
+# Build context ของ frontend — ห้าม copy node_modules จาก host (glibc) ทับ
+# ของ Alpine (musl) — native esbuild/rollup จะรันไม่ได้
+node_modules
+dist
+dist-ssr
+coverage
+.eslintcache

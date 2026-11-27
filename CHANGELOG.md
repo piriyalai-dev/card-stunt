@@ -1,6 +1,13 @@
 # Changelog
 
-## [Unreleased] — ยังไม่ตัดเวอร์ชัน
+## [Unreleased] — Docker build context hygiene
+
+### Build (2026-11-28)
+
+- เพิ่ม `.dockerignore` ทั้ง backend/frontend — กัน host `.venv`, `node_modules`, cache เข้า build context
+  (สำคัญ: native esbuild/rollup ของ host เป็น glibc จะทับตัว musl ของ Alpine แล้ว build frontend พัง)
+
+**Migration:** ไม่มี migration ใหม่
 
 ## [0.3.1] — 2026-11-28 — Deploy wiring: CORS + Redis + media volume
 

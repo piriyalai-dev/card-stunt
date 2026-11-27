@@ -1,0 +1,7 @@
+# Build context ของ backend — อย่าส่ง host venv/cache เข้า image
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+tests
+.gitignore
