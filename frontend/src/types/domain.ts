@@ -215,3 +215,48 @@ export interface StuntStats {
   color_counts_a: Record<string, number>
   color_counts_b: Record<string, number>
 }
+
+// ── Roster / Export (Phase 5 — staff) ─────────────────────────────
+
+export interface RosterOut {
+  id: number
+  event_id: number
+  stand_id: number
+  row_index: number
+  col_index: number
+  row_label: string | null
+  seat_label: string | null
+  student_code: string | null
+  student_name: string
+  note: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ExportFormat = 'pdf' | 'csv' | 'zip'
+export type ExportStatus = 'queued' | 'running' | 'done' | 'failed'
+
+export interface ExportJob {
+  id: number
+  event_id: number
+  stand_id: number | null
+  format: ExportFormat
+  scope: string
+  status: ExportStatus
+  file_path: string | null
+  error: string | null
+  requested_by: number | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface LiveAdminState {
+  event_id: number
+  slug: string
+  current_stunt_id: number | null
+  current_index: number | null
+  total: number
+  published_version: number
+  is_active: boolean
+  stunt_ids: number[]
+}

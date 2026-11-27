@@ -73,3 +73,13 @@ export async function uploadReference(stuntId: number, file: File): Promise<Stun
 export async function getStats(stuntId: number): Promise<StuntStats> {
   return (await api.get(`/api/v1/stunts/${stuntId}/stats`)) as unknown as StuntStats
 }
+
+export interface StuntMediaUrls {
+  reference_url: string | null
+  thumbnail_url: string | null
+}
+
+/** Signed URL ของภาพอ้างอิง (หมดอายุ ~15 นาที) — ใช้กับ `<img>`/overlay ได้โดยไม่ต้องแนบ token */
+export async function getMediaUrls(stuntId: number): Promise<StuntMediaUrls> {
+  return (await api.get(`/api/v1/stunts/${stuntId}/media-urls`)) as unknown as StuntMediaUrls
+}

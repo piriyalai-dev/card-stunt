@@ -36,6 +36,7 @@ import {
   type Region,
 } from '@/lib/grid'
 import { lookupFromColors } from '@/lib/renderer'
+import { absoluteApiUrl } from '@/services/publicApi'
 import * as palettesService from '@/services/palettes'
 import * as standsService from '@/services/stands'
 import * as stuntsService from '@/services/stunts'
@@ -258,6 +259,9 @@ async function load() {
     } else {
       readDraft()
     }
+
+    // overlay ภาพอ้างอิงที่บันทึกไว้ — ไม่ block การโหลด Studio ถ้าโหลดรูปไม่ได้
+    void loadSavedReference()
   } catch (e) {
     error.value = errorMessage(e)
   } finally {
@@ -1009,11 +1013,37 @@ async function saveReference() {
   error.value = ''
   try {
     await stuntsService.uploadReference(stunt.value.id, referenceFile.value)
-    message.value = 'บันทึกภาพอ้างอิงแล้ว (การแสดงผลหลังรีโหลดจะมา Phase 5)'
+    message.value = 'บันทึกภาพอ้างอิงแล้ว — ครั้งหน้าจะโหลดกลับมาเป็น overlay ให้อัตโนมัติ'
   } catch (e) {
     error.value = errorMessage(e)
   } finally {
     saving.value = false
+  }
+}
+
+/**
+ * โหลดภาพอ้างอิงที่เคยบันทึกไว้ (Phase 5 signed URL)
+ *
+ * ⚠️ ต้องตั้ง `crossOrigin` **ก่อน** `src` — ไม่งั้น canvas ถูก taint แล้ว `getImageData`
+ *    (ซึ่ง Studio ใช้ตลอด) จะ throw SecurityError เมื่อรูปมาจากคนละ origin กับ frontend
+ */
+async function loadSavedReference() {
+  if (!stunt.value?.reference_image_path || referenceFile.value) return
+  try {
+    const urls = await stuntsService.getMediaUrls(stunt.value.id)
+    const absolute = absoluteApiUrl(urls.reference_url)
+    if (!absolute) return
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      // ถ้าผู้ใช้เพิ่งเลือกไฟล์เองระหว่างรอ ให้ของผู้ใช้ชนะ
+      if (referenceFile.value) return
+      referenceImage.value = img
+      referenceName.value = 'ภาพอ้างอิงที่บันทึกไว้'
+    }
+    img.src = absolute
+  } catch {
+    // overlay เป็นของเสริม — โหลดไม่ได้ก็ไม่ควรทำให้ Studio เปิดไม่ขึ้น
   }
 }
 

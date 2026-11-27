@@ -23,6 +23,8 @@ const TABS = [
   { name: 'event-stands', label: 'ตั้งค่าแสตน', icon: 'bi-grid-3x3-gap', permission: 'MANAGE_STANDS' },
   { name: 'event-palettes', label: 'ชุดสี', icon: 'bi-palette', permission: 'MANAGE_PALETTES' },
   { name: 'event-stunts', label: 'ฉาก', icon: 'bi-easel2', permission: 'MANAGE_STUNTS' },
+  { name: 'event-live', label: 'คิวสด', icon: 'bi-broadcast', permission: 'CONTROL_LIVE' },
+  { name: 'event-exports', label: 'รายชื่อ & Export', icon: 'bi-file-earmark-arrow-down', permission: 'EXPORT' },
 ] as const
 
 const tabs = computed(() =>

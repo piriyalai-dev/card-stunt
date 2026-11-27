@@ -35,6 +35,8 @@ export const routeTitles: Record<string, string> = {
   'event-stands': 'ตั้งค่าแสตน',
   'event-palettes': 'ชุดสี',
   'event-stunts': 'ฉาก (Stunts)',
+  'event-live': 'คิวสดวันแข่ง',
+  'event-exports': 'รายชื่อ & Export',
   'stunt-studio': 'Pixel Studio',
   'stunt-convert': 'แปลงรูปเป็นพิกเซล',
 }
