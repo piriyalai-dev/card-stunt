@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased] — Phase 3 Backend Core
+## [Unreleased] — ยังไม่ตัดเวอร์ชัน
+
+## [0.2.0] — 2026-11-27 — Phase 3 Backend Core
 
 - Backend: schema 9 ตาราง (events/stands/palettes/palette_colors/stunts/stunt_revisions/seat_rosters/export_jobs/audit_logs) + RBAC + domain APIs ครบตาม design §7
 - Public: `/api/v1/public/*` meta/seat/version + Redis cache/ETag
@@ -17,5 +19,6 @@
 
 **Migration:** `001_init_auth` — DB schema เริ่มจาก `core/init_db.py` (users)
 
-[Unreleased]: https://github.com/piriyalai-dev/card-stunt/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/piriyalai-dev/card-stunt/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/piriyalai-dev/card-stunt/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/piriyalai-dev/card-stunt/compare/84bf061...v0.1.0
