@@ -1,5 +1,5 @@
 {
-  "_comment": "3 บทบาทของ Pixel Stand — admin ⊃ designer ⊃ staff (ตาม design report §3)",
+  "_comment": "3 บทบาทของ Pixel Stand — admin ⊃ designer ⊃ staff (ตาม design report §3) · VIEW_AUDIT_LOG admin-only",
   "roles": {
     "admin": {
       "label": "แอดมิน",
@@ -7,7 +7,7 @@
       "permissions": [
         "MANAGE_USERS", "MANAGE_EVENTS", "MANAGE_STANDS", "MANAGE_PALETTES",
         "MANAGE_STUNTS", "MANAGE_REVISIONS", "PUBLISH_STUNTS", "CONTROL_LIVE",
-        "MANAGE_ROSTERS", "EXPORT"
+        "MANAGE_ROSTERS", "EXPORT", "VIEW_AUDIT_LOG"
       ]
     },
     "designer": {

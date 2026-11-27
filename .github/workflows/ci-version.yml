@@ -1,0 +1,50 @@
+name: ci-version
+
+# ด่านตรวจประวัติเวอร์ชัน — ไม่ build ไม่ deploy แค่ตอบว่า "ประวัติยังเชื่อถือได้ไหม"
+# (ลอกแบบ pirivoice)
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-version-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  version-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: ดึง tag ล่าสุด
+        run: git fetch --tags --force origin
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: ตรวจ version manifest + CHANGELOG + ไฟล์เลขเวอร์ชัน
+        run: node scripts/version-manifest.mjs
+
+      - name: ตรวจ syntax สคริปต์ deploy
+        run: |
+          bash -n release.sh
+          bash -n rollback.sh
+          bash -n pull_all.sh
+          bash -n setup.sh
+          bash -n setup_traefik.sh
+          bash -n push_all.sh
+          bash -n oh_shit.sh
+          bash -n ops/backup/backup.sh
+          bash -n ops/backup/check_disk.sh
+          bash -n ops/backup/restore.sh
+          bash -n ops/backup/purge_media.sh

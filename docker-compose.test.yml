@@ -15,6 +15,17 @@ services:
       timeout: 5s
       retries: 5
 
+  test_redis:
+    image: redis:7-alpine
+    container_name: pixelstand_test_redis
+    ports:
+      - "6379:6379" # เปิดให้ host รัน pytest ตรง ๆ ได้ (test runner ใช้ service name)
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   test_runner:
     build:
       context: ./backend
@@ -25,13 +36,17 @@ services:
       - ./backend:/app:z
     environment:
       - DATABASE_URL=postgresql://test_admin:test_password@test_db:5432/test_pixelstand_db
+      - REDIS_URL=redis://test_redis:6379/15
       - API_KEY=test-api-key-1234
       - SECRET_KEY=test-secret
       - JWT_SECRET=test-jwt-secret
       - SUPER_ADMIN_ID=999999999999999
+      - MEDIA_STORAGE_DIR=/tmp/pixelstand_media
       - PYTHONPATH=/app
     entrypoint: ["/bin/sh", "-c", "export PYTHONDONTWRITEBYTECODE=1 && python -m pip install --no-cache-dir pytest pytest-asyncio && exec \"$@\"", "test_runner"]
     command: ["pytest", "/app/tests", "-v"]
     depends_on:
       test_db:
+        condition: service_healthy
+      test_redis:
         condition: service_healthy

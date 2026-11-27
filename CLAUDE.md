@@ -13,7 +13,7 @@
 - **single environment** — ไม่มี `ENV_NAME` multi-env: image/stack/volume/network ใช้ prefix คงที่ `pixelstand`
 - **role อยู่บน `users`** (`users.role`) — ไม่มีตาราง `students`/`rooms` (3 บทบาท admin/designer/staff ไม่มีห้อง/ระดับชั้น)
 - **RBAC** ใน `core/rbac.py` → `require_permission(conn, user_id, perm)` อ่าน `config/roles.json`
-- **ยังไม่มี**: audit_logs (Phase 3), SSE live sync (Phase 3), ARQ export worker (Phase 5), media/signed-URL (Phase 5)
+- **ยังไม่มี**: ARQ export worker (Phase 5), media/signed-URL (Phase 5) — audit_logs + SSE live sync มีแล้ว (Phase 3)
 
 ## คำสั่ง
 
@@ -34,4 +34,4 @@ cd frontend && npm run type-check && npm run lint && npm run test:unit && npm ru
 
 ## Phase status
 
-Phase 2 (scaffold) เสร็จ · Phase 3 Backend Core · Phase 4 Frontend Admin + Engine · Phase 5 Viewer PWA + Export + Deploy Swarm
+Phase 2 (scaffold) เสร็จ · Phase 3 (Backend Core) เสร็จ · Phase 4 Frontend Admin + Engine · Phase 5 Viewer PWA + Export + Deploy Swarm

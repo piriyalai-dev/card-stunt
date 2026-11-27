@@ -8,3 +8,11 @@ pydantic==2.13.3
 pydantic-settings==2.14.0
 python-dotenv==1.2.2
 httpx==0.28.1
+# Redis cache + live sync (public cache/ETag)
+redis>=5.0.0
+# รูป reference image + thumbnail (Phase 3) — signed URL/media ตัวเต็มมา Phase 5
+Pillow==13.0.0
+# multipart upload (reference image, roster import)
+python-multipart>=0.0.9
+# roster import (xlsx)
+openpyxl==3.1.5

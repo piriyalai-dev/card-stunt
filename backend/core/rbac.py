@@ -18,6 +18,7 @@ AVAILABLE_PERMISSIONS = [
     "CONTROL_LIVE",      # staff: คุมคิวสด
     "MANAGE_ROSTERS",    # staff: import รายชื่อที่นั่ง
     "EXPORT",            # staff: export PDF/CSV/ZIP
+    "VIEW_AUDIT_LOG",    # admin: ดูบันทึกการใช้งาน
 ]
 
 
@@ -42,6 +43,24 @@ async def require_permission(conn: asyncpg.Connection, user_id: int, required_pe
         return True
     if required_permission not in info["permissions"]:
         raise ForbiddenError(f"Access Denied: คุณไม่มีสิทธิ์ '{required_permission}'")
+    return True
+
+
+async def require_any_permission(conn: asyncpg.Connection, user_id: int, required_permissions: list):
+    """ผ่านถ้ามีสิทธิ์อย่างน้อยหนึ่งตัว (ใช้กับ internal read เช่น ดู reference image)."""
+    if settings.SUPER_ADMIN_ID and int(user_id) == int(settings.SUPER_ADMIN_ID):
+        return True
+
+    role = await get_user_role(conn, user_id)
+    if role is None:
+        raise ForbiddenError("Access Denied: ไม่พบผู้ใช้")
+    info = get_role_info(role)
+    if info["is_admin"]:
+        return True
+    if not any(p in info["permissions"] for p in required_permissions):
+        raise ForbiddenError(
+            f"Access Denied: คุณไม่มีสิทธิ์ (ต้องการอย่างน้อยหนึ่ง: {', '.join(required_permissions)})"
+        )
     return True
 
 

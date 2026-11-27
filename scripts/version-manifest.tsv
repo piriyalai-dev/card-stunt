@@ -1,0 +1,5 @@
+# version	date	cut	bump	theme	refs
+# cut = commit ที่ tag ชี้ไป (ตัวที่ build image และ deploy จริง)
+# bump = major | minor | patch
+# refs = PR #a-#b หรือ main — ใช้ตรวจว่า PR ที่ merge แล้วถูกนับครบพอดีครั้งเดียว
+0.1.0	2026-11-27	7569bc6	minor	Phase 2 scaffold — auth + test harness	main

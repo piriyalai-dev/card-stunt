@@ -7,6 +7,7 @@ from jose import jwt
 from core.config import settings
 from core.exceptions import ForbiddenError, NotFoundError
 from core.rbac import get_role_permissions, get_role_is_admin
+from core.logger import AuditLogger
 
 
 def hash_password(password: str) -> str:
@@ -32,10 +33,24 @@ async def authenticate_user(pool: asyncpg.Pool, username: str, password: str) ->
             username,
         )
         if not row:
+            await _audit_login(conn, username, None, False)
             raise NotFoundError("ไม่พบชื่อผู้ใช้นี้ หรือรหัสผ่านไม่ถูกต้อง")
         if not verify_password(password, row["password_hash"]):
+            await _audit_login(conn, username, row["id"], False)
             raise ForbiddenError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
+        await _audit_login(conn, username, row["id"], True)
         return row["id"]
+
+
+async def _audit_login(conn, username, user_id, ok: bool) -> None:
+    try:
+        await AuditLogger("auth").log(
+            conn, "LOGIN" if ok else "LOGIN_FAILED", username, "web",
+            user_id=user_id, entity_type="user", entity_id=str(user_id) if user_id else None,
+            status="success" if ok else "error",
+        )
+    except Exception:
+        pass
 
 
 async def change_password(pool: asyncpg.Pool, user_id: int, old_password: str, new_password: str) -> None:

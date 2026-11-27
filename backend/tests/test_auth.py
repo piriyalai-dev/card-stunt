@@ -24,7 +24,7 @@ async def admin_user(db_pool):
 # === Login happy path ===
 @pytest.mark.asyncio
 async def test_login_success(client, admin_user):
-    res = client.post("/api/auth/login", json={"username": "admin_test", "password": "secret123"})
+    res = client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "secret123"})
     assert res.status_code == 200
     data = res.json()
     assert data["access_token"]
@@ -36,28 +36,28 @@ async def test_login_success(client, admin_user):
 # === Failures ===
 @pytest.mark.asyncio
 async def test_login_wrong_password(client, admin_user):
-    res = client.post("/api/auth/login", json={"username": "admin_test", "password": "wrongpass"})
+    res = client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "wrongpass"})
     assert res.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_login_unknown_user(client):
-    res = client.post("/api/auth/login", json={"username": "nobody", "password": "whatever"})
+    res = client.post("/api/v1/auth/login", json={"username": "nobody", "password": "whatever"})
     assert res.status_code == 401
 
 
 # === /me ===
 @pytest.mark.asyncio
 async def test_me_requires_auth(client):
-    res = client.get("/api/auth/me")
+    res = client.get("/api/v1/auth/me")
     assert res.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_me_with_token(client, admin_user):
-    login = client.post("/api/auth/login", json={"username": "admin_test", "password": "secret123"})
+    login = client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "secret123"})
     token = login.json()["access_token"]
-    res = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
     assert res.json()["username"] == "admin_test"
 
@@ -65,18 +65,18 @@ async def test_me_with_token(client, admin_user):
 # === change-password ===
 @pytest.mark.asyncio
 async def test_change_password(client, admin_user):
-    login = client.post("/api/auth/login", json={"username": "admin_test", "password": "secret123"})
+    login = client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "secret123"})
     token = login.json()["access_token"]
     res = client.post(
-        "/api/auth/change-password",
+        "/api/v1/auth/change-password",
         json={"old_password": "secret123", "new_password": "newpass456"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 200
     # รหัสเก่าใช้ไม่ได้
-    assert client.post("/api/auth/login", json={"username": "admin_test", "password": "secret123"}).status_code == 401
+    assert client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "secret123"}).status_code == 401
     # รหัสใหม่ใช้ได้
-    assert client.post("/api/auth/login", json={"username": "admin_test", "password": "newpass456"}).status_code == 200
+    assert client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "newpass456"}).status_code == 200
 
 
 # === RBAC ===

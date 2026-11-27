@@ -4,7 +4,7 @@ Fixtures สำหรับ pytest integration tests ของ Pixel Stand.
 Pattern ตาม prsc_portal:
 - test_db_url: สร้าง DB ใหม่แบบสุ่มชื่อทุก session → init_db → drop ตอนจบ
 - client: เปลี่ยน settings.DATABASE_URL ไปยัง test DB
-- clean_database: ล้างตารางก่อนทุก test
+- clean_database: TRUNCATE ทุกตารางก่อนทุก test
 """
 import os
 import tempfile
@@ -19,13 +19,19 @@ from fastapi.testclient import TestClient
 from core.config import settings
 from core.init_db import init_db
 from main import app
+from services.auth_service import hash_password
 
 # ไฟล์ credentials ของ seed users — ชี้ไป temp dir (กันเขียนทับไฟล์จริงตอนเทส)
 settings.SEED_CREDENTIALS_FILE = os.path.join(
     tempfile.mkdtemp(prefix="pixel_seed_test_"), "seed_credentials.txt"
 )
+# media ลง temp dir — กันเขียนลง /data/media ของ container
+settings.MEDIA_STORAGE_DIR = tempfile.mkdtemp(prefix="pixel_media_test_")
 
-_TABLES = ("users",)
+_TABLES = (
+    "users", "events", "stands", "palettes", "palette_colors", "stunts",
+    "stunt_revisions", "seat_rosters", "export_jobs", "audit_logs",
+)
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
@@ -82,7 +88,12 @@ async def db_pool(test_db_url):
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_database(db_pool):
     async with db_pool.acquire() as conn:
-        await conn.execute("TRUNCATE TABLE users CASCADE")
+        await conn.execute(f"TRUNCATE TABLE {', '.join(_TABLES)} RESTART IDENTITY CASCADE")
+    try:
+        from core import cache
+        await cache.flush_test_db()
+    except Exception:
+        pass
     yield
 
 
@@ -93,3 +104,73 @@ def client(test_db_url):
     with TestClient(app) as c:
         yield c
     settings.DATABASE_URL = original
+
+
+# ── factories / helpers ────────────────────────────────────────────
+
+async def _create_user(pool, username, password="secret123", role="admin", display_name="T"):
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            "INSERT INTO users (username, password_hash, display_name, role) VALUES ($1,$2,$3,$4) RETURNING id",
+            username, hash_password(password), display_name, role,
+        )
+
+
+def _auth(token):
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def _login(client, username, password="secret123"):
+    res = client.post("/api/v1/auth/login", json={"username": username, "password": password})
+    assert res.status_code == 200, res.text
+    return res.json()["access_token"]
+
+
+@pytest_asyncio.fixture
+async def admin(db_pool, client):
+    uid = await _create_user(db_pool, "admin", "secret123", "admin", "Admin")
+    token = await _login(client, "admin")
+    return {"id": uid, "username": "admin", "token": token}
+
+
+@pytest_asyncio.fixture
+async def designer(db_pool, client):
+    uid = await _create_user(db_pool, "designer", "secret123", "designer", "Designer")
+    token = await _login(client, "designer")
+    return {"id": uid, "username": "designer", "token": token}
+
+
+@pytest_asyncio.fixture
+async def staff(db_pool, client):
+    uid = await _create_user(db_pool, "staff", "secret123", "staff", "Staff")
+    token = await _login(client, "staff")
+    return {"id": uid, "username": "staff", "token": token}
+
+
+@pytest_asyncio.fixture
+async def event_row(admin, client):
+    res = client.post("/api/v1/events", json={"name": "กีฬาสี 69", "slug": "sport69"},
+                      headers=_auth(admin["token"]))
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+@pytest_asyncio.fixture
+async def stand_row(admin, client, event_row):
+    res = client.post(f"/api/v1/events/{event_row['id']}/stands",
+                      json={"name": "โซนกลาง", "rows": 9, "cols": 33},
+                      headers=_auth(admin["token"]))
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+@pytest_asyncio.fixture
+async def palette_row(admin, client, event_row):
+    res = client.post(f"/api/v1/events/{event_row['id']}/palettes",
+                      json={"name": "ชุดสี 1", "colors": [
+                          {"code": "01", "name_th": "แดงสด", "hex": "#B91C1C"},
+                          {"code": "02", "name_th": "เขียว", "hex": "#15803D"},
+                      ]},
+                      headers=_auth(admin["token"]))
+    assert res.status_code == 200, res.text
+    return res.json()
