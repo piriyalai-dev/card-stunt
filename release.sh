@@ -97,6 +97,41 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# ⚠️ แถวล่าสุดของการปล่อยก่อนหน้ายังเป็น cut=RELEASE (เพราะตอนนั้นยังไม่มี commit ให้อ้าง)
+#    ⇒ ก่อน append แถวใหม่ ต้องแทนด้วย commit ที่ tag ก่อนหน้าชี้จริง ไม่งั้น
+#    `version-manifest.mjs --preflight` จะฟ้อง "RELEASE ใช้ได้เฉพาะแถวสุดท้าย"
+#    ทุกครั้งที่ปล่อยรุ่นถัดไป
+if [ "$IS_RC" = "0" ]; then
+    step "backfill cut ของ $PREV"
+    python3 - "$PREV" <<'PY'
+import subprocess
+import sys
+
+prev = sys.argv[1]
+sha = subprocess.check_output(
+    ["git", "rev-parse", f"{prev}^{{commit}}"], text=True
+).strip()[:12]
+path = "scripts/version-manifest.tsv"
+lines = open(path, encoding="utf-8").read().splitlines(keepends=True)
+changed = False
+for i, line in enumerate(lines):
+    if not line.strip() or line.startswith("#"):
+        continue
+    cols = line.rstrip("\n").split("\t")
+    if len(cols) == 6 and cols[0] == prev.lstrip("v") and cols[2] == "RELEASE":
+        cols[2] = sha
+        lines[i] = "\t".join(cols) + "\n"
+        changed = True
+        break
+if changed:
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("".join(lines))
+    print(f"backfill {prev} cut -> {sha}")
+else:
+    print("ไม่ต้อง backfill")
+PY
+fi
+
 TITLE="$(python3 - "$VERSION" "$DATE" "$PREV" "$REPO_SLUG" "$NOTES" "$IS_RC" <<'PY'
 import re, sys
 version, date, prev, slug, notes_path, is_rc = sys.argv[1:7]
