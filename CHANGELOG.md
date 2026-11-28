@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] — ยังไม่ตัดเวอร์ชัน
+## [Unreleased] — Security & deploy hardening + JWT access/refresh + P3 features
 
 ### Fix — Wave 1 (บั๊ก + security) (2026-11-28)
 
