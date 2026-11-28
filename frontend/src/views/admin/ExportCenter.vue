@@ -269,7 +269,7 @@ onUnmounted(stopPolling)
           <input
             ref="fileInput"
             type="file"
-            accept=".csv,.xlsx,.xls,text/csv"
+            accept=".csv,.xlsx,text/csv"
             class="block w-full rounded-control border border-line bg-surface px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-brand-tint file:px-3 file:py-1.5 file:text-brand"
             :disabled="importing"
             @change="onFileChange"

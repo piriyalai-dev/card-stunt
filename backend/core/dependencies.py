@@ -1,49 +1,55 @@
-from fastapi import Request, Security, HTTPException, status, Header, Depends
-from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
-import asyncpg
 from typing import Optional
+
+import asyncpg
+from fastapi import HTTPException, Request, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 
 from core.config import settings
 
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 bearer_auth = HTTPBearer(auto_error=False)
+
+# เส้นทางที่ยังใช้ได้แม้ `must_change_password` ยังจริง (ต้องยอมให้เรียกเพื่อเปลี่ยนรหัส)
+_PASSWORD_CHANGE_ALLOWED = {"/api/v1/auth/me", "/api/v1/auth/change-password"}
+
 
 async def get_db_pool(request: Request) -> asyncpg.Pool:
     return request.app.state.db_pool
 
-def verify_api_key(api_key: str = Security(api_key_header)):
-    if not api_key or api_key != settings.API_KEY:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key")
-    return api_key
 
 # 🚀 แปลงทุก Request ให้เป็น user_id ผ่าน JWT Bearer token
 async def get_current_user(
     request: Request,
-    x_api_key: Optional[str] = Security(api_key_header),
-    auth: Optional[HTTPAuthorizationCredentials] = Security(bearer_auth)
+    auth: Optional[HTTPAuthorizationCredentials] = Security(bearer_auth),
 ) -> dict:
-    """
-    Return: {"user_id": int}
-    เส้นทาง Web: JWT Bearer token → decode `user_id` claim.
-    (PIRIvoice v1 ยังไม่มี Discord bot — จึงไม่มี Discord path)
-    """
-    # กรณี System RPC: ผ่าน X-API-Key (สำหรับ script/automation ที่ไม่ใช่ user จริง)
-    if x_api_key:
-        if x_api_key == settings.API_KEY:
-            return {"user_id": None, "is_system": True}
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+    """JWT Bearer → {"user_id", "must_change_password"} · revalidate ว่า user ยัง active อยู่.
 
-    # กรณี Web (SPA): JWT Bearer
-    if auth:
-        try:
-            token = auth.credentials
-            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-            user_id = payload.get("user_id")
-            if user_id is None:
-                raise HTTPException(status_code=401, detail="Invalid token: Missing user_id")
-            return {"user_id": int(user_id), "is_system": False}
-        except JWTError:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
+    - token หมดอายุ/ไม่ถูกต้อง → 401
+    - user ถูกลบ (soft delete) → 401 (token เก่าใช้ต่อไม่ได้ — กัน token อายุ 30 วันหลุด)
+    - `must_change_password` ยังจริง → 403 ยกเว้น `/auth/me` + `/auth/change-password`
+      (บังคับเปลี่ยนรหัสฝั่ง server ไม่ใช่แค่ฝั่ง frontend)
+    """
+    if not auth:
+        raise HTTPException(status_code=401, detail="Not authenticated: Bearer Token required")
+    try:
+        payload = jwt.decode(auth.credentials, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    raise HTTPException(status_code=401, detail="Not authenticated: Bearer Token required")
+    user_id = payload.get("user_id")
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid token: Missing user_id")
+
+    pool = request.app.state.db_pool
+    row = await pool.fetchrow(
+        "SELECT must_change_password FROM users WHERE id = $1 AND deleted_at IS NULL",
+        int(user_id),
+    )
+    if row is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    must_change = bool(row["must_change_password"])
+    if must_change and request.url.path not in _PASSWORD_CHANGE_ALLOWED:
+        raise HTTPException(status_code=403, detail="ต้องเปลี่ยนรหัสผ่านก่อนใช้งาน")
+
+    return {"user_id": int(user_id), "must_change_password": must_change}

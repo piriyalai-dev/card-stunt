@@ -8,6 +8,8 @@ from core.config import settings
 from core.exceptions import ForbiddenError, NotFoundError
 from core.rbac import get_role_permissions, get_role_is_admin
 from core.logger import AuditLogger
+from core.ratelimit import check_login_rate_limit
+from core.request_context import get_audit_context
 
 
 def hash_password(password: str) -> str:
@@ -27,6 +29,10 @@ def create_access_token(user_id: int) -> str:
 
 
 async def authenticate_user(pool: asyncpg.Pool, username: str, password: str) -> int:
+    # กัน brute-force: นับความพยายาม login ต่อ IP + ต่อ username (raise 429 เมื่อเกินเพดาน)
+    ip = get_audit_context().get("ip_address") or "unknown"
+    await check_login_rate_limit(ip, username)
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT id, password_hash FROM users WHERE username = $1 AND deleted_at IS NULL",
@@ -55,18 +61,23 @@ async def _audit_login(conn, username, user_id, ok: bool) -> None:
 
 async def change_password(pool: asyncpg.Pool, user_id: int, old_password: str, new_password: str) -> None:
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT password_hash FROM users WHERE id = $1 AND deleted_at IS NULL",
-            user_id,
-        )
-        if not row:
-            raise NotFoundError("ไม่พบผู้ใช้")
-        if not verify_password(old_password, row["password_hash"]):
-            raise ForbiddenError("รหัสผ่านเดิมไม่ถูกต้อง")
-        await conn.execute(
-            "UPDATE users SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE id = $2",
-            hash_password(new_password), user_id,
-        )
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT password_hash FROM users WHERE id = $1 AND deleted_at IS NULL",
+                user_id,
+            )
+            if not row:
+                raise NotFoundError("ไม่พบผู้ใช้")
+            if not verify_password(old_password, row["password_hash"]):
+                raise ForbiddenError("รหัสผ่านเดิมไม่ถูกต้อง")
+            await conn.execute(
+                "UPDATE users SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE id = $2",
+                hash_password(new_password), user_id,
+            )
+            await AuditLogger("auth").log(
+                conn, "CHANGE_PASSWORD", str(user_id), "web",
+                user_id=user_id, entity_type="user", entity_id=str(user_id),
+            )
 
 
 async def get_user_by_id(pool: asyncpg.Pool, user_id: int):

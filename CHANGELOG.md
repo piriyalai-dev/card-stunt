@@ -2,6 +2,18 @@
 
 ## [Unreleased] — ยังไม่ตัดเวอร์ชัน
 
+### Fix — Wave 1 (บั๊ก + security) (2026-11-28)
+
+- import roster: ปฏิเสธ `.xls` (BIFF/OLE ที่ openpyxl อ่านไม่ได้) → 400 ชัดเจนไม่ใช่ 500 · ตัด `.0` ของ `student_code` ที่ Excel เก็บเป็นตัวเลข
+- `/health` คืน 503 เมื่อ DB ล่ม (เดิม 200 ปลอมทำให้ `curl -f` healthcheck เขียวทั้งที่ DB ตาย)
+- auth: บังคับ `must_change_password` ฝั่ง server + token ของ user ที่ถูกลบใช้ต่อไม่ได้ (revalidate ต่อ DB ทุก request)
+- export ZIP: เรนเดอร์ด้าน B (`stunts/*-b.png`) สำหรับแสตน 2 หน้า + ระบุ side ใน manifest
+- `change_password` ลง audit log (action `CHANGE_PASSWORD`)
+- rate limit login (per IP + username · Redis + in-memory fallback) — `LOGIN_RATE_LIMIT_MAX` / `LOGIN_RATE_LIMIT_WINDOW_SECONDS`
+- ลบ dead auth code (`verify_api_key`, X-API-Key/`is_system` path ที่เป็นทางตัน)
+
+**Migration:** ไม่มี migration ใหม่
+
 ## [0.4.0] — 2026-11-28 — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
 
 ### Phase 5 — Student Viewer PWA (2026-11-27)

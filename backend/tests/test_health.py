@@ -7,3 +7,24 @@ async def test_health(client):
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
     assert res.json()["database"] == "connected"
+
+
+class _DownPool:
+    """pool ปลอมที่ล้มเหลวตอน acquire — จำลอง DB ล่ม."""
+
+    def acquire(self):
+        raise RuntimeError("db down")
+
+
+@pytest.mark.asyncio
+async def test_health_db_down_returns_503(client):
+    from main import app
+
+    real = app.state.db_pool
+    app.state.db_pool = _DownPool()
+    try:
+        res = client.get("/health")
+        assert res.status_code == 503
+        assert res.json()["status"] == "error"
+    finally:
+        app.state.db_pool = real

@@ -2,7 +2,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.dependencies import get_db_pool, get_current_user
-from core.exceptions import ForbiddenError, NotFoundError
+from core.exceptions import ForbiddenError, NotFoundError, RateLimitError
 from models.auth_schemas import LoginRequest, LoginResponse, UserOut, ChangePasswordRequest
 from services import auth_service
 
@@ -13,6 +13,8 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 async def login(req: LoginRequest, pool: asyncpg.Pool = Depends(get_db_pool)):
     try:
         user_id = await auth_service.authenticate_user(pool, req.username, req.password)
+    except RateLimitError as e:
+        raise HTTPException(status_code=429, detail=str(e))
     except (NotFoundError, ForbiddenError) as e:
         raise HTTPException(status_code=401, detail=str(e))
 

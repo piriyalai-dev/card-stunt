@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 days
 
+    # Rate limit login (กัน brute-force) — per IP + per username, fixed window
+    LOGIN_RATE_LIMIT_MAX: int = 10
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = 300
+
     # CORS — origin ของ frontend ที่อนุญาตให้เรียก API (คั่นด้วย comma)
     # ค่าเริ่มต้นรวม dev server + โดเมนจริงของเครื่องนี้ (override ได้ผ่าน .env)
     CORS_ORIGINS: str = (

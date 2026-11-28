@@ -139,8 +139,8 @@ async def import_roster(pool: asyncpg.Pool, actor_id: int, event_id: int, stand_
                         raise ValidationError(f"ช่อง ({row_index},{col_index}) เป็นช่องปิด")
                     rl, sl = seat_labels(row_index, col_index, g, stand["row_label_style"], stand["col_label_style"],
                                          stand["row_label_prefix"], stand["col_label_prefix"])
-                    student_code = (r.get("student_code") or r.get("code") or "").strip() or None
-                    student_name = (r.get("student_name") or r.get("name") or "").strip()
+                    student_code = (_cell_text(r.get("student_code")) or _cell_text(r.get("code"))) or None
+                    student_name = (_cell_text(r.get("student_name")) or _cell_text(r.get("name")))
                     if not student_name:
                         raise ValidationError("student_name ห้ามว่าง")
                     try:
@@ -166,7 +166,8 @@ async def import_roster(pool: asyncpg.Pool, actor_id: int, event_id: int, stand_
 
 
 def _parse_file(content: bytes, filename: str) -> list:
-    if filename.lower().endswith((".xlsx", ".xls")):
+    lower = filename.lower()
+    if lower.endswith(".xlsx"):
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
         ws = wb.active
@@ -176,10 +177,22 @@ def _parse_file(content: bytes, filename: str) -> list:
         for row in it:
             out.append(dict(zip(header, row)))
         return out
+    if lower.endswith(".xls"):
+        # openpyxl อ่าน legacy BIFF/OLE .xls ไม่ได้ → กัน 500 ดิบ (บทเรียน prsc_portal skills.md)
+        raise ValidationError("ไฟล์ .xls (BIFF/OLE) ไม่รองรับ — เซฟเป็น .xlsx หรือ CSV แล้วลองใหม่")
     # CSV
     text = content.decode("utf-8-sig", errors="replace")
     reader = csv.DictReader(io.StringIO(text))
     return [dict(r) for r in reader]
+
+
+def _cell_text(v) -> str:
+    """แปลงค่าเซลล์ (int/float/str/None) → str · ตัด `.0` ของ float ที่ลงตัว (40000.0 → "40000")."""
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
 
 
 def _parse_seat(r: dict, g: StandGeometry):

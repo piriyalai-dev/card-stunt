@@ -99,6 +99,22 @@ async def test_zip_export_has_grid_png_and_manifest(client, admin, db_pool, even
 
 
 @pytest.mark.asyncio
+async def test_zip_export_renders_side_b(client, admin, db_pool, event_row, stand_row, palette_row):
+    import json
+
+    _prepare_published(client, admin, event_row, stand_row, palette_row)
+    _, content = await _run(client, admin, db_pool, event_row, "zip")
+    with zipfile.ZipFile(io.BytesIO(content)) as zf:
+        names = zf.namelist()
+        assert "stunts/01-S1.png" in names
+        assert "stunts/01-S1-b.png" in names
+        manifest = json.loads(zf.read("manifest.json"))
+        sides = {f["file"].split("/")[-1]: f.get("side") for f in manifest["files"]}
+        assert sides["01-S1.png"] == "a"
+        assert sides["01-S1-b.png"] == "b"
+
+
+@pytest.mark.asyncio
 async def test_retry_requeues_finished_job(client, admin, db_pool, event_row, stand_row, palette_row):
     _prepare_published(client, admin, event_row, stand_row, palette_row)
     job_id, _ = await _run(client, admin, db_pool, event_row, "csv")

@@ -427,11 +427,11 @@ def _safe_filename(text: str) -> str:
     return cleaned or "stunt"
 
 
-def _render_grid_png(stunt: dict, g: StandGeometry, colors: dict[int, dict], scale: int) -> bytes:
+def _render_grid_png(stunt: dict, g: StandGeometry, colors: dict[int, dict], scale: int, side: str = "a") -> bytes:
     width, height = g.grid_width, g.grid_height
     img = Image.new("RGB", (width * scale, height * scale), EMPTY_CELL)
     draw = ImageDraw.Draw(img)
-    grid = _as_list(stunt.get("grid_data_a"))
+    grid = _as_list(stunt.get(f"grid_data_{side}"))
     if len(grid) == width * height:
         for r in range(height):
             for c in range(width):
@@ -471,13 +471,25 @@ def build_zip(event: dict, stands: list[dict], palettes: list[dict],
             if not g:
                 continue
             scale = max(2, min(12, 1800 // max(1, g.grid_width)))
-            png = _render_grid_png(stunt, g, colors, scale)
-            name = f"stunts/{index:02d}-{_safe_filename(stunt['code'])}.png"
-            zf.writestr(name, png)
+            code = _safe_filename(stunt["code"])
+
+            # ด้าน A
+            name_a = f"stunts/{index:02d}-{code}.png"
+            zf.writestr(name_a, _render_grid_png(stunt, g, colors, scale, "a"))
             manifest["files"].append({
-                "file": name, "code": stunt["code"], "title": stunt["title"],
-                "order_index": stunt.get("order_index", 0),
+                "file": name_a, "code": stunt["code"], "title": stunt["title"],
+                "side": "a", "order_index": stunt.get("order_index", 0),
             })
+
+            # ด้าน B (ถ้ามี content) — แสตน 2 หน้า (A/B)
+            grid_b = _as_list(stunt.get("grid_data_b"))
+            if len(grid_b) == g.grid_width * g.grid_height and any(v is not None for v in grid_b):
+                name_b = f"stunts/{index:02d}-{code}-b.png"
+                zf.writestr(name_b, _render_grid_png(stunt, g, colors, scale, "b"))
+                manifest["files"].append({
+                    "file": name_b, "code": stunt["code"], "title": stunt["title"],
+                    "side": "b", "order_index": stunt.get("order_index", 0),
+                })
 
         zf.writestr("seats.csv", build_csv(records, palettes))
         zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"))
@@ -485,6 +497,7 @@ def build_zip(event: dict, stands: list[dict], palettes: list[dict],
             f"Pixel Stand — {event['name']}\n"
             f"สร้างเมื่อ {date.today().isoformat()}\n\n"
             "stunts/*.png = ภาพกริดเต็มของแต่ละฉาก (ด้าน A)\n"
+            "stunts/*-b.png = ภาพกริดเต็มด้าน B (ถ้ามี)\n"
             "seats.csv   = ตารางรวมรายที่นั่ง (side A/B, รหัสสีทุกช่อง)\n"
             "manifest.json = ลำดับฉาก + รายการสี\n"
         ).encode("utf-8"))

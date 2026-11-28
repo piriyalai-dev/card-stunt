@@ -79,6 +79,69 @@ async def test_change_password(client, admin_user):
     assert client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "newpass456"}).status_code == 200
 
 
+# === deleted user / must_change_password (Wave 1 hardening) ===
+@pytest.mark.asyncio
+async def test_deleted_user_token_rejected(client, db_pool, admin_user):
+    token = client.post("/api/v1/auth/login",
+                        json={"username": "admin_test", "password": "secret123"}).json()["access_token"]
+    async with db_pool.acquire() as conn:
+        await conn.execute("UPDATE users SET deleted_at = NOW() WHERE username = 'admin_test'")
+    res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_must_change_password_gate(client, db_pool):
+    async with db_pool.acquire() as conn:
+        await conn.fetchval(
+            "INSERT INTO users (username, password_hash, display_name, role, must_change_password)"
+            " VALUES ($1,$2,$3,$4, TRUE) RETURNING id",
+            "forced_change", auth_service.hash_password("secret123"), "Forced", "admin",
+        )
+    token = client.post("/api/v1/auth/login",
+                        json={"username": "forced_change", "password": "secret123"}).json()["access_token"]
+
+    # บล็อก endpoint อื่นด้วย 403
+    assert client.get("/api/v1/users", headers={"Authorization": f"Bearer {token}"}).status_code == 403
+    # /auth/me ยังใช้ได้ (เพื่อให้ frontend รู้ว่าเป็นใคร)
+    assert client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    # /auth/change-password ยังใช้ได้ และเคลียร์ must_change_password
+    res = client.post("/api/v1/auth/change-password",
+                      json={"old_password": "secret123", "new_password": "newpass789"},
+                      headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    # หลังเปลี่ยนรหัส ใช้ endpoint อื่นได้แล้ว (gate อ่าน flag จาก DB ทุก request)
+    assert client.get("/api/v1/users", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+
+# === rate limit login ===
+@pytest.mark.asyncio
+async def test_login_rate_limited(client, admin_user):
+    from core.config import settings
+
+    payload = {"username": "admin_test", "password": "wrongpass"}
+    statuses = [
+        client.post("/api/v1/auth/login", json=payload).status_code
+        for _ in range(settings.LOGIN_RATE_LIMIT_MAX + 1)
+    ]
+    assert statuses[-2] == 401  # ยังไม่ถึงเพดาน
+    assert statuses[-1] == 429  # เกินเพดาน
+
+
+# === audit change-password ===
+@pytest.mark.asyncio
+async def test_change_password_is_audited(client, db_pool, admin_user):
+    token = client.post("/api/v1/auth/login",
+                        json={"username": "admin_test", "password": "secret123"}).json()["access_token"]
+    res = client.post("/api/v1/auth/change-password",
+                      json={"old_password": "secret123", "new_password": "newpass456"},
+                      headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT 1 FROM audit_logs WHERE action = 'CHANGE_PASSWORD'")
+    assert row is not None
+
+
 # === RBAC ===
 @pytest.mark.asyncio
 async def test_rbac_require_permission(db_pool):

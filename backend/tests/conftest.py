@@ -96,6 +96,11 @@ async def clean_database(db_pool):
         await cache.flush_test_db()
     except Exception:
         pass
+    try:
+        from core import ratelimit
+        ratelimit.reset()
+    except Exception:
+        pass
     yield
 
 

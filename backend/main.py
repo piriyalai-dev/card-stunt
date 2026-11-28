@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import asyncpg
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from core.config import settings
 from core.init_db import init_db
@@ -113,7 +114,8 @@ async def health_check():
             await conn.fetchval("SELECT 1")
         return {"status": "ok", "database": "connected"}
     except Exception:
-        return {"status": "error", "database": "disconnected"}
+        # 503 (ไม่ใช่ 200) เพื่อให้ healthcheck `curl -f` จับ DB-down ได้จริง
+        return JSONResponse(status_code=503, content={"status": "error", "database": "disconnected"})
 
 
 if __name__ == "__main__":
