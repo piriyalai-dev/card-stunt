@@ -1,0 +1,87 @@
+name: ci-tests
+
+# ด่านเทสต์จริง (เดิม ci-version.yml ทำแค่ version manifest + bash -n)
+# backend: pytest ผ่าน docker compose test harness (Postgres + Redis จริง)
+# frontend: type-check + lint + unit + build
+# e2e: Playwright (mock API — ไม่ต้องมี backend)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: เริ่ม test harness (Postgres + Redis)
+        run: docker compose -f docker-compose.test.yml up -d test_db test_redis
+
+      - name: รัน backend tests
+        run: docker compose -f docker-compose.test.yml run --rm test_runner
+
+  frontend:
+    name: Frontend (type-check + lint + unit + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: ติดตั้ง dependencies
+        run: npm ci
+
+      - name: type-check
+        run: npm run type-check
+
+      - name: lint
+        run: npm run lint
+
+      - name: unit tests
+        run: npm run test:unit
+
+      - name: build
+        run: npm run build
+
+  e2e:
+    name: Frontend E2E (Playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: ติดตั้ง dependencies
+        run: npm ci
+
+      - name: ติดตั้ง Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npm run test:e2e

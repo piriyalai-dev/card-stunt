@@ -23,6 +23,15 @@
 
 **Migration:** ไม่มี migration ใหม่
 
+### Chore — Wave 3 (deploy hardening) (2026-11-28)
+
+- CI: workflow `ci-tests.yml` รัน backend pytest + frontend type-check/lint/unit/build + Playwright E2E (เดิม CI ทำแค่ version-manifest + `bash -n`)
+- healthcheck: infra db (`pg_isready`) + redis (`redis-cli ping`) + frontend (nginx `wget`)
+- `.env.example` ครบทุก Settings field ที่มีผล (JWT / cache TTL / media dimension / roster limits / seed file)
+- docs: `production-hardening.md` — runbook สำหรับ HTTPS (แตะ shared traefik), Docker secrets, resource limits · เตรียม tls label (commented) ใน `docker-compose.app.yml`
+
+**Migration:** ไม่มี migration ใหม่
+
 ## [0.4.0] — 2026-11-28 — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
 
 ### Phase 5 — Student Viewer PWA (2026-11-27)

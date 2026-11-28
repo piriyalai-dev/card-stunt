@@ -37,6 +37,11 @@ services:
         - "traefik.http.routers.pixelstand_backend.rule=Host(`${API_DOMAIN}`)"
         - "traefik.http.services.pixelstand_backend.loadbalancer.server.port=8000"
         - "traefik.docker.network=traefik-public"
+        # 🔒 HTTPS: uncomment 3 บรรทัดล่าง เมื่อ global_proxy traefik มี :443 + ACME certresolver แล้ว
+        #    (ดู docs/4-developer-playbook/production-hardening.md) — อย่าเปิดก่อน ไม่งั้น route HTTP พัง
+        # - "traefik.http.routers.pixelstand_backend.entrypoints=websecure"
+        # - "traefik.http.routers.pixelstand_backend.tls=true"
+        # - "traefik.http.routers.pixelstand_backend.tls.certresolver=letsencrypt"
 
   # ── ARQ worker (export PDF/CSV/ZIP) ────────────────────────────────
   # ใช้ image เดียวกับ backend แต่ override command · max_jobs=1 ใน WorkerSettings
@@ -64,6 +69,11 @@ services:
     image: pixelstand-frontend:${IMAGE_TAG:-latest}
     networks:
       - traefik-public
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     deploy:
       replicas: 1
       update_config:
@@ -77,6 +87,10 @@ services:
         - "traefik.http.routers.pixelstand_frontend.rule=Host(`${WEB_DOMAIN}`)"
         - "traefik.http.services.pixelstand_frontend.loadbalancer.server.port=80"
         - "traefik.docker.network=traefik-public"
+        # 🔒 HTTPS: uncomment 3 บรรทัดล่าง เมื่อ global_proxy traefik มี :443 + ACME certresolver แล้ว
+        # - "traefik.http.routers.pixelstand_frontend.entrypoints=websecure"
+        # - "traefik.http.routers.pixelstand_frontend.tls=true"
+        # - "traefik.http.routers.pixelstand_frontend.tls.certresolver=letsencrypt"
 
 volumes:
   media_data:

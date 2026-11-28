@@ -80,3 +80,5 @@ cd frontend && npm run test:e2e
 - volume ที่ต้องคงอยู่: `media_data`, `export_data`
 - worker ไม่มี healthcheck HTTP — ใช้ `restart_policy: on-failure`
 - หลัง redeploy ตรวจ `docker service ps pixelstand_app_worker` ว่าไม่ restart loop
+- ⚠️ งานที่เหลือก่อน "deploy swarm จริง" (HTTPS / Docker secrets / resource limits)
+  ดู [`production-hardening.md`](production-hardening.md)
