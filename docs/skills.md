@@ -3339,3 +3339,13 @@
   = `../../workers/` · เช็คด้วย `ls` ว่าไฟล์ worker อยู่ชั้นไหนจริง · สัญญาณคือ error ขึ้น path ที่มี `views/workers`
   ทั้งที่ไฟล์อยู่ `src/workers`
 - **Date Added:** 2026-11-28
+
+### 🛠️ Docker healthcheck `http://localhost/` ใน alpine → `::1` (IPv6) · busybox `wget` ไม่ fallback
+- **Context/Problem:** healthcheck `wget -q -O /dev/null http://localhost/` บน `nginx:alpine` หลุด
+  "Connection refused" ทั้งที่ nginx รัน + `netstat` เห็น bind `0.0.0.0:80` → swarm update ค้าง
+  `UpdateStatus=paused` (task "early termination") จน rollover ไม่จบ
+- **Root Cause:** ใน alpine `/etc/hosts` ผูก `localhost` กับ `::1` (IPv6) ตัวเดียว · nginx `listen 80;`
+  bind แค่ IPv4 · busybox `wget` ไม่ fallback IPv6→IPv4 (ต่างจาก `curl` ที่ fallback ได้)
+- **Correct Pattern/Solution:** healthcheck ใช้ `http://127.0.0.1/` (IPv4 ตรงๆ) · หรือ nginx
+  `listen [::]:80;` · debug ด้วย `docker exec <c> sh -c 'getent hosts localhost; wget -q -O /dev/null http://127.0.0.1/'`
+- **Date Added:** 2026-11-28

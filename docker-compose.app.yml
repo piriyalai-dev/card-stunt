@@ -96,7 +96,9 @@ services:
     networks:
       - traefik-public
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/"]
+      # ⚠️ ใช้ 127.0.0.1 ไม่ใช่ localhost — ใน alpine `localhost` resolve เป็น `::1` (IPv6)
+      #    แต่ nginx bind แค่ IPv4 ⇒ busybox wget ไม่ fallback → healthcheck หลุด (Connection refused)
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
       interval: 15s
       timeout: 5s
       retries: 3
