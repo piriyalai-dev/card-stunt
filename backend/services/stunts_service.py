@@ -10,7 +10,7 @@ from core.ratelimit import check_rate_limit
 from core.rbac import require_permission
 
 STUNT_COLS = (
-    "id, event_id, stand_id, palette_a_id, palette_b_id, code, title, section, notes, order_index,"
+    "id, event_id, stand_id, side, code, title, section, notes, order_index,"
     " status, grid_width, grid_height, reference_image_path, reference_transform, thumbnail_path,"
     " created_at, updated_at"
 )
@@ -83,23 +83,17 @@ async def create_stunt(pool: asyncpg.Pool, actor_id: int, event_id: int, data: d
             gw = stand["cols"] * stand["sub_cols"]
             gh = stand["rows"] * stand["sub_rows"]
 
-            # validate palette อยู่ใน event
-            for pid in (data.get("palette_a_id"), data.get("palette_b_id")):
-                if pid:
-                    ok = await conn.fetchval(
-                        "SELECT 1 FROM palettes WHERE id = $1 AND (event_id = $2 OR event_id IS NULL) AND deleted_at IS NULL",
-                        pid, event_id,
-                    )
-                    if not ok:
-                        raise ValidationError("palette ไม่อยู่ใน event นี้")
+            side = data.get("side") or "A"
+            if side not in ("A", "B"):
+                raise ValidationError("side ต้องเป็น A หรือ B")
 
             try:
                 sid = await conn.fetchval(
-                    "INSERT INTO stunts (event_id, stand_id, palette_a_id, palette_b_id, code, title,"
+                    "INSERT INTO stunts (event_id, stand_id, side, code, title,"
                     " section, notes, order_index, grid_width, grid_height, created_by, updated_by)"
-                    " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING id",
-                    event_id, stand_id, data.get("palette_a_id"), data.get("palette_b_id"),
-                    data["code"], data["title"], data.get("section"), data.get("notes"),
+                    " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11) RETURNING id",
+                    event_id, stand_id, side, data["code"], data["title"],
+                    data.get("section"), data.get("notes"),
                     data.get("order_index", 0), gw, gh, actor_id,
                 )
             except asyncpg.UniqueViolationError:
@@ -123,8 +117,7 @@ async def update_stunt(pool: asyncpg.Pool, actor_id: int, stunt_id: int, data: d
             if not row:
                 raise NotFoundError("ไม่พบ stunt")
             sets, params = [], []
-            for col in ("code", "title", "section", "notes", "order_index", "status",
-                        "palette_a_id", "palette_b_id"):
+            for col in ("code", "title", "section", "notes", "order_index", "status", "side"):
                 if data.get(col) is not None:
                     params.append(data[col])
                     sets.append(f"{col} = ${len(params)}")
@@ -197,34 +190,35 @@ async def update_grid(pool: asyncpg.Pool, actor_id: int, stunt_id: int, data: di
             await require_permission(conn, actor_id, "MANAGE_STUNTS")
             # fetch พร้อม grid_data เดิม (STUNT_COLS ไม่มี grid_data — ต้องดึงแยกสำหรับ snapshot)
             row = await conn.fetchrow(
-                "SELECT id, event_id, palette_a_id, palette_b_id, grid_width, grid_height, grid_data_a, grid_data_b"
+                "SELECT id, event_id, side, grid_width, grid_height, grid_data"
                 " FROM stunts WHERE id = $1 AND deleted_at IS NULL", stunt_id,
             )
             if not row:
                 raise NotFoundError("ไม่พบ stunt")
 
-            allowed_a = await _color_ids(conn, row["palette_a_id"])
-            allowed_b = await _color_ids(conn, row["palette_b_id"])
-            a = data.get("grid_data_a")
-            b = data.get("grid_data_b")
-            if a is None and b is None:
-                raise ValidationError("ต้องระบุ grid_data_a หรือ grid_data_b")
-            _validate(a, row["grid_width"], row["grid_height"], allowed_a)
-            _validate(b, row["grid_width"], row["grid_height"], allowed_b)
+            # palette มาจาก event ตาม side ของฉาก (ชุดสีระดับงาน)
+            if row["side"] == "A":
+                palette_id = await conn.fetchval(
+                    "SELECT palette_a_id FROM events WHERE id = $1", row["event_id"],
+                )
+            else:
+                palette_id = await conn.fetchval(
+                    "SELECT palette_b_id FROM events WHERE id = $1", row["event_id"],
+                )
+            allowed = await _color_ids(conn, palette_id)
+
+            grid = data.get("grid_data")
+            if grid is None:
+                raise ValidationError("ต้องระบุ grid_data")
+            _validate(grid, row["grid_width"], row["grid_height"], allowed)
 
             from services.events_service import _bump_version
             await _bump_version(conn, row["event_id"])
 
-            if a is not None:
-                await conn.execute(
-                    "UPDATE stunts SET grid_data_a = $1::jsonb, updated_at = NOW(), updated_by = $2 WHERE id = $3",
-                    json.dumps(a), actor_id, stunt_id,
-                )
-            if b is not None:
-                await conn.execute(
-                    "UPDATE stunts SET grid_data_b = $1::jsonb, updated_at = NOW(), updated_by = $2 WHERE id = $3",
-                    json.dumps(b), actor_id, stunt_id,
-                )
+            await conn.execute(
+                "UPDATE stunts SET grid_data = $1::jsonb, updated_at = NOW(), updated_by = $2 WHERE id = $3",
+                json.dumps(grid), actor_id, stunt_id,
+            )
             # grid ถูกแก้ → ต้อง re-publish ⇒ status กลับ ready
             await conn.execute(
                 "UPDATE stunts SET status = 'ready' WHERE id = $1 AND status = 'published'", stunt_id,
@@ -241,10 +235,10 @@ async def update_grid(pool: asyncpg.Pool, actor_id: int, stunt_id: int, data: di
 
 
 async def get_grid(pool: asyncpg.Pool, stunt_id: int) -> dict:
-    """อ่าน grid เต็ม (A/B) สำหรับ Pixel Studio — `StuntOut` ตั้งใจไม่พก payload 1MB มาทุก list."""
+    """อ่าน grid เต็มสำหรับ Pixel Studio — `StuntOut` ตั้งใจไม่พก payload 1MB มาทุก list."""
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT grid_width, grid_height, grid_data_a, grid_data_b FROM stunts"
+            "SELECT grid_width, grid_height, grid_data FROM stunts"
             " WHERE id = $1 AND deleted_at IS NULL", stunt_id,
         )
         if not row:
@@ -253,8 +247,7 @@ async def get_grid(pool: asyncpg.Pool, stunt_id: int) -> dict:
         return {
             "grid_width": row["grid_width"],
             "grid_height": row["grid_height"],
-            "grid_data_a": _json(row["grid_data_a"]) or [],
-            "grid_data_b": _json(row["grid_data_b"]) or [],
+            "grid_data": _json(row["grid_data"]) or [],
         }
 
 
@@ -286,12 +279,10 @@ async def _snapshot_revision(conn, stunt_id, actor_id, note, row):
         "SELECT COALESCE(MAX(revision_no), 0) + 1 FROM stunt_revisions WHERE stunt_id = $1", stunt_id,
     )
     await conn.execute(
-        "INSERT INTO stunt_revisions (stunt_id, revision_no, grid_width, grid_height, grid_data_a,"
-        " grid_data_b, palette_a_id, palette_b_id, note, created_by)"
-        " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+        "INSERT INTO stunt_revisions (stunt_id, revision_no, grid_width, grid_height, grid_data, note, created_by)"
+        " VALUES ($1,$2,$3,$4,$5,$6,$7)",
         stunt_id, next_no, row["grid_width"], row["grid_height"],
-        row["grid_data_a"], row["grid_data_b"], row["palette_a_id"], row["palette_b_id"],
-        note, actor_id,
+        row["grid_data"], note, actor_id,
     )
     # prune เก็บแค่ REVISION_RETENTION ล่าสุด
     await conn.execute(
@@ -318,7 +309,7 @@ async def restore_revision(pool: asyncpg.Pool, actor_id: int, stunt_id: int, rev
             await require_permission(conn, actor_id, "MANAGE_REVISIONS")
             # fetch พร้อม grid_data เดิม (STUNT_COLS ไม่มี grid_data — ต้องดึงแยกสำหรับ snapshot)
             stunt = await conn.fetchrow(
-                "SELECT id, event_id, palette_a_id, palette_b_id, grid_width, grid_height, grid_data_a, grid_data_b"
+                "SELECT id, event_id, side, grid_width, grid_height, grid_data"
                 " FROM stunts WHERE id = $1 AND deleted_at IS NULL", stunt_id,
             )
             if not stunt:
@@ -331,11 +322,9 @@ async def restore_revision(pool: asyncpg.Pool, actor_id: int, stunt_id: int, rev
             from services.events_service import _bump_version
             await _bump_version(conn, stunt["event_id"])
             await conn.execute(
-                "UPDATE stunts SET grid_width = $1, grid_height = $2, grid_data_a = $3, grid_data_b = $4,"
-                " palette_a_id = $5, palette_b_id = $6, status = 'ready', updated_at = NOW(), updated_by = $7"
-                " WHERE id = $8",
-                rev["grid_width"], rev["grid_height"], rev["grid_data_a"], rev["grid_data_b"],
-                rev["palette_a_id"], rev["palette_b_id"], actor_id, stunt_id,
+                "UPDATE stunts SET grid_width = $1, grid_height = $2, grid_data = $3,"
+                " status = 'ready', updated_at = NOW(), updated_by = $4 WHERE id = $5",
+                rev["grid_width"], rev["grid_height"], rev["grid_data"], actor_id, stunt_id,
             )
             await _snapshot_revision(conn, stunt_id, actor_id, f"restore revision {rev['revision_no']}", stunt)
             await AuditLogger("stunts").log(
@@ -370,29 +359,20 @@ async def upload_reference(pool: asyncpg.Pool, actor_id: int, stunt_id: int, con
 
 
 async def stats(pool: asyncpg.Pool, stunt_id: int) -> dict:
-    # ⚠️ ต้องดึง grid_data_* แยก — `STUNT_COLS` ตั้งใจไม่พก payload 1MB ใน list
+    # ⚠️ ต้องดึง grid_data แยก — `STUNT_COLS` ตั้งใจไม่พก payload 1MB ใน list
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT grid_width, grid_height, grid_data_a, grid_data_b FROM stunts"
+            "SELECT grid_width, grid_height, grid_data FROM stunts"
             " WHERE id = $1 AND deleted_at IS NULL", stunt_id,
         )
     if not row:
         raise NotFoundError("ไม่พบ stunt")
-    a = _json(row["grid_data_a"]) or []
-    b = _json(row["grid_data_b"]) or []
-    def counts(data):
-        c = {}
-        filled = 0
-        for v in data:
-            if v is not None:
-                filled += 1
-                c[str(v)] = c.get(str(v), 0) + 1
-        return filled, c
-    fa, ca = counts(a)
-    fb, cb = counts(b)
+    data = _json(row["grid_data"]) or []
+    c = {}
+    filled = 0
+    for v in data:
+        if v is not None:
+            filled += 1
+            c[str(v)] = c.get(str(v), 0) + 1
     total = row["grid_width"] * row["grid_height"]
-    return {
-        "total_cells": total,
-        "filled_a": fa, "filled_b": fb,
-        "color_counts_a": ca, "color_counts_b": cb,
-    }
+    return {"total_cells": total, "filled": filled, "color_counts": c}

@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     LOGIN_RATE_LIMIT_MAX: int = 10
     LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = 300
 
+    # Rate limit ใส่รหัสล็อกอินนักเรียน (claim) — per IP, fixed window (กันเดารหัส)
+    CLAIM_RATE_LIMIT_MAX: int = 30
+    CLAIM_RATE_LIMIT_WINDOW_SECONDS: int = 300
+
     # Rate limit การทำงาน bulk (upload reference image / import roster / สร้าง export) — per user
     BULK_OP_RATE_LIMIT_MAX: int = 60
     BULK_OP_RATE_LIMIT_WINDOW_SECONDS: int = 3600

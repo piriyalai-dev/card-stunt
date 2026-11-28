@@ -127,15 +127,14 @@ def seat_records(event: dict, stands: list[dict], palettes: list[dict],
                 student = roster_index.get((int(stand["id"]), r, c))
                 cues = []
                 for stunt in stunts_by_stand.get(int(stand["id"]), []):
-                    grid_a = _as_list(stunt.get("grid_data_a"))
-                    grid_b = _as_list(stunt.get("grid_data_b"))
+                    grid = _as_list(stunt.get("grid_data"))
                     cues.append({
                         "stunt_id": stunt["id"],
                         "code": stunt["code"],
                         "title": stunt["title"],
                         "notes": stunt.get("notes"),
-                        "side_a": _plate(grid_a, g, r, c),
-                        "side_b": _plate(grid_b, g, r, c),
+                        "side": stunt.get("side", "A"),
+                        "plate": _plate(grid, g, r, c),
                     })
                 records.append({
                     "event_name": event["name"],
@@ -150,6 +149,7 @@ def seat_records(event: dict, stands: list[dict], palettes: list[dict],
                     "seat_label": seat_label,
                     "student_code": (student or {}).get("student_code"),
                     "student_name": (student or {}).get("student_name"),
+                    "access_code": (student or {}).get("access_code"),
                     "cues": cues,
                 })
     return records
@@ -159,7 +159,7 @@ def seat_records(event: dict, stands: list[dict], palettes: list[dict],
 
 CSV_HEADER = [
     "stand", "row", "seat", "row_index", "col_index",
-    "student_code", "student_name",
+    "student_code", "student_name", "access_code",
     "stunt_code", "stunt_title", "side", "sub_grid_codes", "notes",
 ]
 
@@ -197,18 +197,13 @@ def build_csv(records: list[dict], palettes: list[dict]) -> bytes:
             rec["stand_name"], rec["row_label"], rec["seat_label"],
             # index เป็น 0-based (ตรงกับ DB/API) — label ด้านบนเป็น 1-based ตามป้ายแสตน
             rec["row_index"], rec["col_index"],
-            rec["student_code"] or "", rec["student_name"] or "",
+            rec["student_code"] or "", rec["student_name"] or "", rec.get("access_code") or "",
         ]
         for cue in rec["cues"]:
             writer.writerow(base + [
-                cue["code"], cue["title"], "A",
-                _plate_codes(cue["side_a"], colors), cue.get("notes") or "",
+                cue["code"], cue["title"], cue["side"],
+                _plate_codes(cue["plate"], colors), cue.get("notes") or "",
             ])
-            if cue["side_b"] and _distinct(cue["side_b"]):
-                writer.writerow(base + [
-                    cue["code"], cue["title"], "B",
-                    _plate_codes(cue["side_b"], colors), cue.get("notes") or "",
-                ])
         if not rec["cues"]:
             writer.writerow(base + ["", "", "", "", ""])
     # BOM — ให้ Excel เปิดภาษาไทย/UTF-8 ถูกต้องโดยไม่ต้อง import wizard
@@ -260,10 +255,6 @@ def _fit_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: float) -> s
 
 # ── PDF ─────────────────────────────────────────────────────────────
 
-def _has_side_b(plate) -> bool:
-    return bool(plate) and any(cell is not None for row in plate for cell in row)
-
-
 def _draw_mini_grid(draw, plate, colors, x: int, y: int, cell: int, label: str | None = None):
     if not plate:
         return 0, 0
@@ -295,19 +286,15 @@ def _draw_cue(draw, cue: dict, colors: dict[int, dict], x: int, y: int, w: int, 
     draw.text((x + code_w, y + 1), title, font=_font(14), fill=MUTED)
 
     gy = y + 24
-    cell = max(8, min(13, int((h - 30 - (14 if _has_side_b(cue["side_b"]) else 0)) / 5)))
+    cell = max(8, min(13, int((h - 30) / 5)))
     used_w = 0
-    if cue["side_a"]:
-        gw, _ = _draw_mini_grid(draw, cue["side_a"], colors, x, gy, cell, "A")
+    if cue["plate"]:
+        gw, _ = _draw_mini_grid(draw, cue["plate"], colors, x, gy, cell, cue["side"])
         used_w = gw
-    if _has_side_b(cue["side_b"]):
-        _draw_mini_grid(draw, cue["side_b"], colors, x + used_w + 12, gy, cell, "B")
-        used_w += 12 + (cue["side_b"] and len(cue["side_b"][0]) * cell or 0)
 
-    # รายชื่อสีที่ต้องใช้ (ไม่เกิน 4 สี) — ถ้าด้าน A ว่างแต่ด้าน B มี ให้ใช้ B แทน
-    primary = cue["side_a"] if _distinct(cue["side_a"]) else cue["side_b"]
-    codes = _distinct_codes(primary, colors) or "—"
-    more = _distinct(primary)
+    # รายชื่อสีที่ต้องใช้ (ไม่เกิน 4 สี)
+    codes = _distinct_codes(cue["plate"], colors) or "—"
+    more = _distinct(cue["plate"])
     if len(more) > 4:
         shown = " · ".join(
             f"{colors[c]['code']} {colors[c]['name_th']}" for c in more[:4] if c in colors
@@ -333,6 +320,15 @@ def _draw_card(draw, box, rec: dict, colors: dict[int, dict]) -> None:
         student = f"{student} · {rec['student_code']}"
     draw.text((x0 + 24, y0 + 70), _fit_text(draw, student, _font(14), x1 - x0 - 48),
               font=_font(14), fill=INK)
+
+    # รหัสล็อกอิน (พิมพ์แจกนักเรียน) — มุมบนขวาของการ์ด
+    if rec.get("access_code"):
+        label = "รหัสล็อกอิน"
+        lw = draw.textlength(label, font=_font(12))
+        draw.text((x1 - 24 - lw, y0 + 22), label, font=_font(12), fill=MUTED)
+        acw = draw.textlength(rec["access_code"], font=_font(26))
+        draw.text((x1 - 24 - acw, y0 + 38), rec["access_code"], font=_font(26), fill=INK)
+
     draw.line([x0 + 24, y0 + 98, x1 - 24, y0 + 98], fill=LINE, width=2)
 
     cues = rec["cues"]
@@ -395,10 +391,9 @@ def build_pdf(event: dict, records: list[dict], palettes: list[dict]) -> bytes:
         used: list[int] = []
         for rec in chunk:
             for cue in rec["cues"]:
-                for plate in (cue["side_a"], cue["side_b"]):
-                    for cid in _distinct(plate):
-                        if cid not in used:
-                            used.append(cid)
+                for cid in _distinct(cue["plate"]):
+                    if cid not in used:
+                        used.append(cid)
         if used:
             lx, ly = MARGIN, PAGE_H - MARGIN + 6
             for cid in used[:14]:
@@ -427,11 +422,11 @@ def _safe_filename(text: str) -> str:
     return cleaned or "stunt"
 
 
-def _render_grid_png(stunt: dict, g: StandGeometry, colors: dict[int, dict], scale: int, side: str = "a") -> bytes:
+def _render_grid_png(stunt: dict, g: StandGeometry, colors: dict[int, dict], scale: int) -> bytes:
     width, height = g.grid_width, g.grid_height
     img = Image.new("RGB", (width * scale, height * scale), EMPTY_CELL)
     draw = ImageDraw.Draw(img)
-    grid = _as_list(stunt.get(f"grid_data_{side}"))
+    grid = _as_list(stunt.get("grid_data"))
     if len(grid) == width * height:
         for r in range(height):
             for c in range(width):
@@ -473,32 +468,21 @@ def build_zip(event: dict, stands: list[dict], palettes: list[dict],
             scale = max(2, min(12, 1800 // max(1, g.grid_width)))
             code = _safe_filename(stunt["code"])
 
-            # ด้าน A
-            name_a = f"stunts/{index:02d}-{code}.png"
-            zf.writestr(name_a, _render_grid_png(stunt, g, colors, scale, "a"))
+            side = str(stunt.get("side", "A")).lower()
+            name = f"stunts/{index:02d}-{code}-{side}.png"
+            zf.writestr(name, _render_grid_png(stunt, g, colors, scale))
             manifest["files"].append({
-                "file": name_a, "code": stunt["code"], "title": stunt["title"],
-                "side": "a", "order_index": stunt.get("order_index", 0),
+                "file": name, "code": stunt["code"], "title": stunt["title"],
+                "side": side, "order_index": stunt.get("order_index", 0),
             })
-
-            # ด้าน B (ถ้ามี content) — แสตน 2 หน้า (A/B)
-            grid_b = _as_list(stunt.get("grid_data_b"))
-            if len(grid_b) == g.grid_width * g.grid_height and any(v is not None for v in grid_b):
-                name_b = f"stunts/{index:02d}-{code}-b.png"
-                zf.writestr(name_b, _render_grid_png(stunt, g, colors, scale, "b"))
-                manifest["files"].append({
-                    "file": name_b, "code": stunt["code"], "title": stunt["title"],
-                    "side": "b", "order_index": stunt.get("order_index", 0),
-                })
 
         zf.writestr("seats.csv", build_csv(records, palettes))
         zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"))
         zf.writestr("README.txt", (
             f"Pixel Stand — {event['name']}\n"
             f"สร้างเมื่อ {date.today().isoformat()}\n\n"
-            "stunts/*.png = ภาพกริดเต็มของแต่ละฉาก (ด้าน A)\n"
-            "stunts/*-b.png = ภาพกริดเต็มด้าน B (ถ้ามี)\n"
-            "seats.csv   = ตารางรวมรายที่นั่ง (side A/B, รหัสสีทุกช่อง)\n"
+            "stunts/*.png = ภาพกริดเต็มของแต่ละฉาก (ตามด้าน A/B)\n"
+            "seats.csv   = ตารางรวมรายที่นั่ง (ด้าน, รหัสสีทุกช่อง, รหัสล็อกอิน)\n"
             "manifest.json = ลำดับฉาก + รายการสี\n"
         ).encode("utf-8"))
 

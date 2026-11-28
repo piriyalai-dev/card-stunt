@@ -17,20 +17,22 @@ def _prepare_published(client, admin, event_row, stand_row, palette_row):
     """สร้างฉาก 1 ฉากที่ fill ทั้งกริด + roster ที่นั่ง A1 + publish."""
     headers = AUTH(admin["token"])
     color_a = palette_row["colors"][0]["id"]
-    color_b = palette_row["colors"][1]["id"]
+
+    assert client.patch(
+        f"/api/v1/events/{event_row['id']}",
+        json={"palette_a_id": palette_row["id"], "palette_b_id": palette_row["id"]},
+        headers=headers,
+    ).status_code == 200
 
     stunt = client.post(
         f"/api/v1/events/{event_row['id']}/stunts",
-        json={
-            "code": "S1", "title": "เปิดตัว", "stand_id": stand_row["id"],
-            "palette_a_id": palette_row["id"], "palette_b_id": palette_row["id"],
-        },
+        json={"code": "S1", "title": "เปิดตัว", "stand_id": stand_row["id"], "side": "A"},
         headers=headers,
     ).json()
     cells = stand_row["rows"] * stand_row["sub_rows"] * stand_row["cols"] * stand_row["sub_cols"]
     r = client.put(
         f"/api/v1/stunts/{stunt['id']}/grid",
-        json={"grid_data_a": [color_a] * cells, "grid_data_b": [color_b] * cells},
+        json={"grid_data": [color_a] * cells},
         headers=headers,
     )
     assert r.status_code == 200, r.text
@@ -80,11 +82,12 @@ async def test_csv_export_contains_seat_and_cue(client, admin, db_pool, event_ro
     rows = list(csv.reader(io.StringIO(content.decode("utf-8-sig"))))
     assert rows[0][:4] == ["stand", "row", "seat", "row_index"]
     seat = next(r for r in rows[1:] if r[0] == "โซนกลาง" and r[1] == "A" and r[2] == "1")
-    assert seat[5] == "10001"
-    assert seat[6] == "นาย ตัวอย่าง"
-    assert seat[7] == "S1"
-    assert seat[9] == "A"
-    assert seat[10].split()[0] == "01"  # รหัสสีช่องแรก
+    assert seat[5] == "10001"          # student_code
+    assert seat[6] == "นาย ตัวอย่าง"   # student_name
+    assert len(seat[7]) == 8           # access_code
+    assert seat[8] == "S1"             # stunt_code
+    assert seat[10] == "A"             # side
+    assert seat[11].split()[0] == "01"  # รหัสสีช่องแรก
 
 
 @pytest.mark.asyncio
@@ -99,19 +102,17 @@ async def test_zip_export_has_grid_png_and_manifest(client, admin, db_pool, even
 
 
 @pytest.mark.asyncio
-async def test_zip_export_renders_side_b(client, admin, db_pool, event_row, stand_row, palette_row):
+async def test_zip_export_renders_side(client, admin, db_pool, event_row, stand_row, palette_row):
     import json
 
     _prepare_published(client, admin, event_row, stand_row, palette_row)
     _, content = await _run(client, admin, db_pool, event_row, "zip")
     with zipfile.ZipFile(io.BytesIO(content)) as zf:
         names = zf.namelist()
-        assert "stunts/01-S1.png" in names
-        assert "stunts/01-S1-b.png" in names
+        assert "stunts/01-S1-a.png" in names
         manifest = json.loads(zf.read("manifest.json"))
         sides = {f["file"].split("/")[-1]: f.get("side") for f in manifest["files"]}
-        assert sides["01-S1.png"] == "a"
-        assert sides["01-S1-b.png"] == "b"
+        assert sides["01-S1-a.png"] == "a"
 
 
 @pytest.mark.asyncio

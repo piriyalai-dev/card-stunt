@@ -13,6 +13,21 @@ async def test_create_roster(client, admin, event_row, stand_row):
     assert r.status_code == 200, r.text
     assert r.json()["row_label"] == "A"
     assert r.json()["seat_label"] == "1"
+    # mint รหัสล็อกอิน 8 ตัวอักษร (unique ต่อ event)
+    assert len(r.json()["access_code"]) == 8
+
+
+@pytest.mark.asyncio
+async def test_roster_access_codes_unique(client, admin, event_row, stand_row):
+    codes = set()
+    for col in range(5):
+        r = client.post(f"/api/v1/events/{event_row['id']}/rosters",
+                        json={"stand_id": stand_row["id"], "row_index": 0, "col_index": col,
+                              "student_name": f"นาย {col}"},
+                        headers={"Authorization": f"Bearer {admin['token']}"})
+        assert r.status_code == 200, r.text
+        codes.add(r.json()["access_code"])
+    assert len(codes) == 5
 
 
 @pytest.mark.asyncio

@@ -28,6 +28,7 @@ class RosterOut(BaseModel):
     row_label: Optional[str] = None
     seat_label: Optional[str] = None
     student_code: Optional[str] = None
+    access_code: Optional[str] = None
     student_name: str
     note: Optional[str] = None
     created_at: datetime

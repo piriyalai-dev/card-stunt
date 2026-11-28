@@ -7,37 +7,40 @@ from core import media
 
 
 @pytest.mark.asyncio
-async def test_create_stunt_shell(client, admin, event_row, stand_row, palette_row):
+async def test_create_stunt_shell(client, admin, event_row, stand_row):
     r = client.post(f"/api/v1/events/{event_row['id']}/stunts",
-                    json={"code": "S1", "title": "ฉาก 1", "palette_a_id": palette_row["id"]},
+                    json={"code": "S1", "title": "ฉาก 1", "side": "A"},
                     headers={"Authorization": f"Bearer {admin['token']}"})
     assert r.status_code == 200, r.text
     assert r.json()["grid_width"] == 165
     assert r.json()["grid_height"] == 45
+    assert r.json()["side"] == "A"
 
 
 @pytest.mark.asyncio
-async def test_grid_validation(client, admin, event_row, stand_row, palette_row):
-    s = client.post(f"/api/v1/events/{event_row['id']}/stunts",
-                    json={"code": "S1", "title": "ฉาก", "palette_a_id": palette_row["id"]},
+async def test_grid_validation(client, admin, event_with_palettes, stand_row):
+    event_id = event_with_palettes["id"]
+    s = client.post(f"/api/v1/events/{event_id}/stunts",
+                    json={"code": "S1", "title": "ฉาก", "side": "A"},
                     headers={"Authorization": f"Bearer {admin['token']}"})
     sid = s.json()["id"]
     # ยาวผิด → 400
-    r = client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data_a": [1, 2, 3]},
+    r = client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data": [1, 2, 3]},
                    headers={"Authorization": f"Bearer {admin['token']}"})
     assert r.status_code == 400
     # สีไม่อยู่ใน palette → 400
-    r = client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data_a": [999] * (165 * 45)},
+    r = client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data": [999] * (165 * 45)},
                    headers={"Authorization": f"Bearer {admin['token']}"})
     assert r.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_get_grid_round_trip(client, admin, event_row, stand_row, palette_row):
+async def test_get_grid_round_trip(client, admin, event_with_palettes, stand_row, palette_row):
     """Studio ต้องโหลด grid เดิมได้ — endpoint นี้คือคู่ของ PUT /grid."""
+    event_id = event_with_palettes["id"]
     color_a = palette_row["colors"][0]["id"]
-    s = client.post(f"/api/v1/events/{event_row['id']}/stunts",
-                    json={"code": "S1", "title": "ฉาก", "palette_a_id": palette_row["id"]},
+    s = client.post(f"/api/v1/events/{event_id}/stunts",
+                    json={"code": "S1", "title": "ฉาก", "side": "A"},
                     headers={"Authorization": f"Bearer {admin['token']}"})
     sid = s.json()["id"]
 
@@ -45,38 +48,39 @@ async def test_get_grid_round_trip(client, admin, event_row, stand_row, palette_
     r = client.get(f"/api/v1/stunts/{sid}/grid",
                    headers={"Authorization": f"Bearer {admin['token']}"})
     assert r.status_code == 200, r.text
-    assert r.json()["grid_data_a"] == []
+    assert r.json()["grid_data"] == []
     assert r.json()["grid_width"] == 165
 
     g = [color_a] * (165 * 45)
-    assert client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data_a": g},
+    assert client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data": g},
                       headers={"Authorization": f"Bearer {admin['token']}"}).status_code == 200
 
     r = client.get(f"/api/v1/stunts/{sid}/grid",
                    headers={"Authorization": f"Bearer {admin['token']}"})
     assert r.status_code == 200, r.text
-    assert r.json()["grid_data_a"] == g
+    assert r.json()["grid_data"] == g
 
 
 @pytest.mark.asyncio
-async def test_stats_counts_grid(client, admin, event_row, stand_row, palette_row):
+async def test_stats_counts_grid(client, admin, event_with_palettes, stand_row, palette_row):
     """REGRESSION: stats เคย 500 เพราะอ่าน grid_data จาก query ที่ไม่ได้ select."""
+    event_id = event_with_palettes["id"]
     color_a = palette_row["colors"][0]["id"]
     color_b = palette_row["colors"][1]["id"]
-    s = client.post(f"/api/v1/events/{event_row['id']}/stunts",
-                    json={"code": "S1", "title": "ฉาก", "palette_a_id": palette_row["id"]},
+    s = client.post(f"/api/v1/events/{event_id}/stunts",
+                    json={"code": "S1", "title": "ฉาก", "side": "A"},
                     headers={"Authorization": f"Bearer {admin['token']}"})
     sid = s.json()["id"]
     grid = [color_a, color_a, None, color_b] + [None] * (165 * 45 - 4)
-    assert client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data_a": grid},
+    assert client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data": grid},
                       headers={"Authorization": f"Bearer {admin['token']}"}).status_code == 200
     r = client.get(f"/api/v1/stunts/{sid}/stats",
                    headers={"Authorization": f"Bearer {admin['token']}"})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["filled_a"] == 3
-    assert body["color_counts_a"][str(color_a)] == 2
-    assert body["color_counts_a"][str(color_b)] == 1
+    assert body["filled"] == 3
+    assert body["color_counts"][str(color_a)] == 2
+    assert body["color_counts"][str(color_b)] == 1
     assert body["total_cells"] == 165 * 45
 
 
@@ -88,20 +92,21 @@ async def test_get_grid_unknown_stunt_404(client, admin):
 
 
 @pytest.mark.asyncio
-async def test_revisions_snapshot_and_restore(client, admin, event_row, stand_row, palette_row):
+async def test_revisions_snapshot_and_restore(client, admin, event_with_palettes, stand_row, palette_row):
+    event_id = event_with_palettes["id"]
     color_a = palette_row["colors"][0]["id"]
     color_b = palette_row["colors"][1]["id"]
-    s = client.post(f"/api/v1/events/{event_row['id']}/stunts",
-                    json={"code": "S1", "title": "ฉาก", "palette_a_id": palette_row["id"]},
+    s = client.post(f"/api/v1/events/{event_id}/stunts",
+                    json={"code": "S1", "title": "ฉาก", "side": "A"},
                     headers={"Authorization": f"Bearer {admin['token']}"})
     sid = s.json()["id"]
     # save v1 (all color_a) → สร้าง revision 1
     g1 = [color_a] * (165 * 45)
-    assert client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data_a": g1},
+    assert client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data": g1},
                       headers={"Authorization": f"Bearer {admin['token']}"}).status_code == 200
     # save v2 (all color_b) → revision 2
     g2 = [color_b] * (165 * 45)
-    assert client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data_a": g2},
+    assert client.put(f"/api/v1/stunts/{sid}/grid", json={"grid_data": g2},
                       headers={"Authorization": f"Bearer {admin['token']}"}).status_code == 200
 
     revs = client.get(f"/api/v1/stunts/{sid}/revisions",
@@ -114,10 +119,10 @@ async def test_revisions_snapshot_and_restore(client, admin, event_row, stand_ro
 
 
 @pytest.mark.asyncio
-async def test_delete_stunt_removes_media_files(client, admin, event_row, stand_row, palette_row):
+async def test_delete_stunt_removes_media_files(client, admin, event_row, stand_row):
     """delete_stunt ต้องลบไฟล์ media (reference/thumb) ด้วย — กัน orphan บนดิสก์."""
     s = client.post(f"/api/v1/events/{event_row['id']}/stunts",
-                    json={"code": "S1", "title": "ฉาก", "palette_a_id": palette_row["id"]},
+                    json={"code": "S1", "title": "ฉาก", "side": "A"},
                     headers={"Authorization": f"Bearer {admin['token']}"})
     sid = s.json()["id"]
 

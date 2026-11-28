@@ -6,7 +6,7 @@ from core.rbac import require_permission
 
 EVENT_COLUMNS = (
     "id, slug, name, description, event_date, status, version, published_version,"
-    " public_access_enabled, roster_lookup_enabled, live_stunt_id, live_is_active,"
+    " public_access_enabled, palette_a_id, palette_b_id, live_stunt_id, live_is_active,"
     " created_at, updated_at"
 )
 
@@ -85,9 +85,19 @@ async def update_event(pool: asyncpg.Pool, actor_id: int, event_id: int, data: d
             )
             if not row:
                 raise NotFoundError("ไม่พบ event")
+            # palette A/B ต้องเป็นของ event นี้ (หรือ global)
+            for pid in (data.get("palette_a_id"), data.get("palette_b_id")):
+                if pid is not None:
+                    ok = await conn.fetchval(
+                        "SELECT 1 FROM palettes WHERE id = $1 AND (event_id = $2 OR event_id IS NULL) AND deleted_at IS NULL",
+                        pid, event_id,
+                    )
+                    if not ok:
+                        raise ValidationError("palette ไม่อยู่ใน event นี้")
+
             sets, params = [], []
             for col in ("name", "description", "event_date", "status",
-                        "public_access_enabled", "roster_lookup_enabled"):
+                        "public_access_enabled", "palette_a_id", "palette_b_id"):
                 if data.get(col) is not None:
                     params.append(data[col])
                     sets.append(f"{col} = ${len(params)}")
@@ -124,6 +134,8 @@ async def delete_event(pool: asyncpg.Pool, actor_id: int, event_id: int):
             await conn.execute("UPDATE seat_rosters SET deleted_at = NOW() WHERE event_id = $1 AND deleted_at IS NULL", event_id)
             await conn.execute("UPDATE stands SET deleted_at = NOW() WHERE event_id = $1 AND deleted_at IS NULL", event_id)
             await conn.execute("UPDATE palettes SET deleted_at = NOW() WHERE event_id = $1 AND deleted_at IS NULL", event_id)
+            # live_queue ไม่มี soft-delete → hard delete
+            await conn.execute("DELETE FROM live_queue WHERE event_id = $1", event_id)
             await conn.execute("UPDATE events SET deleted_at = NOW() WHERE id = $1", event_id)
             await AuditLogger("events").log(
                 conn, "DELETE_EVENT", str(actor_id), "web",
@@ -193,21 +205,56 @@ async def duplicate_event(pool: asyncpg.Pool, actor_id: int, event_id: int, data
                         pid, c["code"], c["name_th"], c["hex"], c["text_color"], c["order_index"],
                     )
 
-            # stunts
+            # event palette A/B (remap ผ่าน palette_map)
+            src_ev = await conn.fetchrow(
+                "SELECT palette_a_id, palette_b_id FROM events WHERE id = $1", event_id,
+            )
+            await conn.execute(
+                "UPDATE events SET palette_a_id = $1, palette_b_id = $2 WHERE id = $3",
+                palette_map.get(src_ev["palette_a_id"]), palette_map.get(src_ev["palette_b_id"]), new_id,
+            )
+
+            # stunts (side + grid เดียว)
+            stunt_map = {}
             for st in await conn.fetch(
-                "SELECT stand_id, palette_a_id, palette_b_id, code, title, section, notes, order_index,"
-                " grid_width, grid_height, grid_data_a, grid_data_b FROM stunts"
+                "SELECT id, stand_id, side, code, title, section, notes, order_index,"
+                " grid_width, grid_height, grid_data FROM stunts"
                 " WHERE event_id = $1 AND deleted_at IS NULL ORDER BY order_index, id", event_id,
             ):
-                await conn.execute(
-                    "INSERT INTO stunts (event_id, stand_id, palette_a_id, palette_b_id, code, title,"
-                    " section, notes, order_index, grid_width, grid_height, grid_data_a, grid_data_b,"
-                    " created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)",
-                    new_id, stand_map.get(st["stand_id"]), palette_map.get(st["palette_a_id"]),
-                    palette_map.get(st["palette_b_id"]), st["code"], st["title"], st["section"],
+                sid = await conn.fetchval(
+                    "INSERT INTO stunts (event_id, stand_id, side, code, title,"
+                    " section, notes, order_index, grid_width, grid_height, grid_data,"
+                    " created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING id",
+                    new_id, stand_map.get(st["stand_id"]), st["side"], st["code"], st["title"], st["section"],
                     st["notes"], st["order_index"], st["grid_width"], st["grid_height"],
-                    st["grid_data_a"], st["grid_data_b"], actor_id,
+                    st["grid_data"], actor_id,
                 )
+                stunt_map[st["id"]] = sid
+
+            # rosters — mint access_code ใหม่ (ห้าม copy code เดิมข้ามงาน)
+            from services.rosters_service import _mint_access_code
+            for r in await conn.fetch(
+                "SELECT stand_id, row_index, col_index, row_label, seat_label, student_code, student_name, note"
+                " FROM seat_rosters WHERE event_id = $1 AND deleted_at IS NULL ORDER BY id", event_id,
+            ):
+                access_code = await _mint_access_code(conn, new_id)
+                await conn.execute(
+                    "INSERT INTO seat_rosters (event_id, stand_id, row_index, col_index, row_label,"
+                    " seat_label, student_code, access_code, student_name, note)"
+                    " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+                    new_id, stand_map.get(r["stand_id"]), r["row_index"], r["col_index"], r["row_label"],
+                    r["seat_label"], r["student_code"], access_code, r["student_name"], r["note"],
+                )
+
+            # live_queue (remap stunt_id)
+            for q in await conn.fetch(
+                "SELECT position, stunt_id FROM live_queue WHERE event_id = $1 ORDER BY position", event_id,
+            ):
+                if q["stunt_id"] in stunt_map:
+                    await conn.execute(
+                        "INSERT INTO live_queue (event_id, position, stunt_id) VALUES ($1,$2,$3)",
+                        new_id, q["position"], stunt_map[q["stunt_id"]],
+                    )
 
             await AuditLogger("events").log(
                 conn, "DUPLICATE_EVENT", str(actor_id), "web",
@@ -236,8 +283,22 @@ async def publish_event(pool: asyncpg.Pool, actor_id: int, event_id: int):
             if not has_stand or not has_stunt:
                 raise ValidationError("ต้องมี stand และ stunt อย่างน้อยหนึ่งรายการก่อน publish")
 
+            # seed live_queue จาก stunts (ถ้ายังว่าง) — คิวเริ่มต้น = ลำดับ order_index
+            queue_empty = not await conn.fetchval(
+                "SELECT 1 FROM live_queue WHERE event_id = $1 LIMIT 1", event_id,
+            )
+            if queue_empty:
+                for i, st in enumerate(await conn.fetch(
+                    "SELECT id FROM stunts WHERE event_id = $1 AND deleted_at IS NULL ORDER BY order_index, id",
+                    event_id,
+                )):
+                    await conn.execute(
+                        "INSERT INTO live_queue (event_id, position, stunt_id) VALUES ($1,$2,$3)",
+                        event_id, i, st["id"],
+                    )
+
             first = await conn.fetchval(
-                "SELECT id FROM stunts WHERE event_id = $1 AND deleted_at IS NULL ORDER BY order_index, id LIMIT 1",
+                "SELECT stunt_id FROM live_queue WHERE event_id = $1 ORDER BY position LIMIT 1",
                 event_id,
             )
             await conn.execute(

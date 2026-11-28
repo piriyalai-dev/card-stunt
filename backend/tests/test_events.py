@@ -36,6 +36,32 @@ async def test_duplicate_copies_subtree(client, admin, event_row, stand_row, pal
 
 
 @pytest.mark.asyncio
+async def test_duplicate_copies_rosters_and_queue_with_new_codes(client, admin, event_row, stand_row):
+    headers = {"Authorization": f"Bearer {admin['token']}"}
+    assert client.post(f"/api/v1/events/{event_row['id']}/stunts",
+                       json={"code": "S1", "title": "ฉาก", "side": "A"}, headers=headers).status_code == 200
+    r = client.post(f"/api/v1/events/{event_row['id']}/rosters",
+                    json={"stand_id": stand_row["id"], "row_index": 0, "col_index": 0, "student_name": "ก"},
+                    headers=headers)
+    assert r.status_code == 200, r.text
+    src_code = r.json()["access_code"]
+    # publish source → seed queue
+    assert client.post(f"/api/v1/events/{event_row['id']}/publish", headers=headers).status_code == 200
+
+    dup = client.post(f"/api/v1/events/{event_row['id']}/duplicate",
+                      json={"name": "กีฬาสี 70", "slug": "sport70"}, headers=headers)
+    assert dup.status_code == 200, dup.text
+    new_id = dup.json()["id"]
+
+    new_rosters = client.get(f"/api/v1/events/{new_id}/rosters", headers=headers).json()
+    assert len(new_rosters) == 1
+    assert new_rosters[0]["access_code"] != src_code  # mint ใหม่ ไม่ copy code ข้ามงาน
+
+    new_queue = client.get(f"/api/v1/events/{new_id}/queue", headers=headers).json()
+    assert len(new_queue) == 1  # queue remap stunt_id
+
+
+@pytest.mark.asyncio
 async def test_publish_requires_stunt(client, admin, event_row, stand_row):
     r = client.post(f"/api/v1/events/{event_row['id']}/publish",
                     headers={"Authorization": f"Bearer {admin['token']}"})

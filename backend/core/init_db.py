@@ -17,7 +17,7 @@ async def init_db(pool: asyncpg.Pool):
     """สร้างตารางหลักทั้งหมด + รัน migrations — เรียกจาก main.py (startup) และ run_setup (CLI).
 
     ลำดับ DDL เรียงตาม FK: users → events → stands → palettes → palette_colors
-    → stunts → stunt_revisions → seat_rosters → export_jobs → audit_logs
+    → stunts → stunt_revisions → seat_rosters → export_jobs → audit_logs → live_queue
 
     ⚠️ source of truth = ไฟล์นี้ · behavior/trigger อยู่ที่ migration เท่านั้น (กฎ backend.md)
     """
@@ -42,6 +42,8 @@ async def init_db(pool: asyncpg.Pool):
             # ── 2. events ───────────────────────────────────────────
             #   version = bump ทุก mutation ของ subtree (ขับ cache/ETag)
             #   live_stunt_id ตั้งใจ **ไม่มี FK** (circular กับ stunts) — service validate
+            #   palette_a_id/b_id ประกาศเป็น INT เปล่า (ไม่ inline FK) — เพราะ events ถูกสร้าง
+            #   ก่อน palettes; FK ตัวจริงเติมที่ migration 006 แบบ guarded
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS events (
                     id SERIAL PRIMARY KEY,
@@ -54,7 +56,8 @@ async def init_db(pool: asyncpg.Pool):
                     published_version INT NOT NULL DEFAULT 0,
                     published_at TIMESTAMPTZ,
                     public_access_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-                    roster_lookup_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                    palette_a_id INT,
+                    palette_b_id INT,
                     live_stunt_id INT,
                     live_is_active BOOLEAN NOT NULL DEFAULT FALSE,
                     live_updated_at TIMESTAMPTZ,
@@ -124,14 +127,13 @@ async def init_db(pool: asyncpg.Pool):
                 );
             """)
 
-            # ── 6. stunts (2 หน้า: palette_a/grid_data_a + palette_b/grid_data_b) ──
+            # ── 6. stunts (1 ภาพ = 1 ฉาก + side A/B) ──
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS stunts (
                     id SERIAL PRIMARY KEY,
                     event_id INT NOT NULL,
                     stand_id INT NOT NULL,
-                    palette_a_id INT REFERENCES palettes(id) ON DELETE SET NULL,
-                    palette_b_id INT REFERENCES palettes(id) ON DELETE SET NULL,
+                    side TEXT NOT NULL DEFAULT 'A' CHECK (side IN ('A','B')),
                     code TEXT NOT NULL,
                     title TEXT NOT NULL,
                     section TEXT,
@@ -140,8 +142,7 @@ async def init_db(pool: asyncpg.Pool):
                     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','ready','published')),
                     grid_width INT NOT NULL,
                     grid_height INT NOT NULL,
-                    grid_data_a JSONB,
-                    grid_data_b JSONB,
+                    grid_data JSONB,
                     reference_image_path TEXT,
                     reference_transform JSONB,
                     thumbnail_path TEXT,
@@ -163,10 +164,7 @@ async def init_db(pool: asyncpg.Pool):
                     revision_no INT NOT NULL CHECK (revision_no > 0),
                     grid_width INT NOT NULL,
                     grid_height INT NOT NULL,
-                    grid_data_a JSONB,
-                    grid_data_b JSONB,
-                    palette_a_id INT REFERENCES palettes(id) ON DELETE SET NULL,
-                    palette_b_id INT REFERENCES palettes(id) ON DELETE SET NULL,
+                    grid_data JSONB,
                     note TEXT,
                     created_by INT REFERENCES users(id) ON DELETE SET NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -184,6 +182,7 @@ async def init_db(pool: asyncpg.Pool):
                     row_label TEXT,
                     seat_label TEXT,
                     student_code TEXT,
+                    access_code TEXT,
                     student_name TEXT NOT NULL,
                     note TEXT,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -233,6 +232,19 @@ async def init_db(pool: asyncpg.Pool):
                     user_agent TEXT NOT NULL DEFAULT '-',
                     execution_time_ms INT NOT NULL DEFAULT 0,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            # ── 11. live_queue (คิวแสดง — แยกจาก order_index ของคลังฉาก) ──
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS live_queue (
+                    id BIGSERIAL PRIMARY KEY,
+                    event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                    position INT NOT NULL,
+                    stunt_id INT NOT NULL REFERENCES stunts(id) ON DELETE CASCADE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_live_queue_event_position UNIQUE (event_id, position),
+                    CONSTRAINT uq_live_queue_event_stunt UNIQUE (event_id, stunt_id)
                 );
             """)
 

@@ -15,7 +15,7 @@ from core.live_stream import hub
 from routers import (
     auth_router, users_router, events_router, stands_router, palettes_router,
     stunts_router, rosters_router, exports_router, live_router, public_router,
-    audit_router, version_router, media_router,
+    audit_router, version_router, media_router, queue_router,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -117,6 +117,7 @@ app.include_router(stunts_router.router, prefix="/api/v1")
 app.include_router(rosters_router.router, prefix="/api/v1")
 app.include_router(exports_router.router, prefix="/api/v1")
 app.include_router(live_router.router, prefix="/api/v1")
+app.include_router(queue_router.router, prefix="/api/v1")
 app.include_router(public_router.router, prefix="/api/v1/public")
 app.include_router(media_router.router, prefix="/api/v1")
 app.include_router(audit_router.router, prefix="/api/v1")
