@@ -1,10 +1,8 @@
 import { expect, test } from '@playwright/test'
 import { mockAdminApi } from './fixtures'
 
-test.beforeEach(async ({ page }) => {
-  // ผ่าน guard ของ router — token ปลอม + `/auth/me` ถูก mock
-  await page.addInitScript(() => localStorage.setItem('access_token', 'e2e-token'))
-})
+// ไม่ต้อง seed localStorage แล้ว — access token อยู่ใน memory · หน้าแรก bootstrap เรียก
+// `POST /auth/refresh` (ถูก mock ใน fixtures.ts) เพื่อขอ token + user
 
 test('staff: รายชื่อ + สั่ง export แล้ว poll จนเสร็จ', async ({ page }) => {
   const mock = await mockAdminApi(page)

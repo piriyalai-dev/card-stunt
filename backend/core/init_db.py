@@ -32,6 +32,7 @@ async def init_db(pool: asyncpg.Pool):
                     display_name TEXT,
                     role TEXT NOT NULL DEFAULT 'staff',
                     must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+                    token_version INT NOT NULL DEFAULT 0,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     deleted_at TIMESTAMPTZ

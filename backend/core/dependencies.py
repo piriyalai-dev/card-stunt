@@ -36,16 +36,21 @@ async def get_current_user(
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
+    # refresh token ห้ามใช้เป็น access token
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="Invalid token: not an access token")
     user_id = payload.get("user_id")
-    if user_id is None:
-        raise HTTPException(status_code=401, detail="Invalid token: Missing user_id")
+    ver = payload.get("ver")
+    if user_id is None or ver is None:
+        raise HTTPException(status_code=401, detail="Invalid token: Missing claims")
 
     pool = request.app.state.db_pool
     row = await pool.fetchrow(
-        "SELECT must_change_password FROM users WHERE id = $1 AND deleted_at IS NULL",
+        "SELECT must_change_password, token_version FROM users WHERE id = $1 AND deleted_at IS NULL",
         int(user_id),
     )
-    if row is None:
+    # row None = user ถูกลบ · ver ไม่ตรง = session ถูกเพิกถอน (เปลี่ยนรหัส/logout-all)
+    if row is None or int(row["token_version"]) != int(ver):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     must_change = bool(row["must_change_password"])

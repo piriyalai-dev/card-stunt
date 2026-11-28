@@ -11,6 +11,15 @@ export async function login(
   }
 }
 
+export async function refresh(): Promise<{ access_token: string; user: AuthUser }> {
+  // อาศัย httpOnly refresh cookie (withCredentials) — ไม่ต้องส่ง token
+  return (await api.post('/api/v1/auth/refresh')) as { access_token: string; user: AuthUser }
+}
+
+export async function logout(): Promise<{ status: string }> {
+  return (await api.post('/api/v1/auth/logout')) as { status: string }
+}
+
 export async function fetchMe(): Promise<AuthUser> {
   // ห้าม cache — เป็นตัวตนผู้ใช้; Pinia ถือ state ล่าสุดไว้อยู่แล้ว
   return (await api.get('/api/v1/auth/me', { noCache: true })) as AuthUser

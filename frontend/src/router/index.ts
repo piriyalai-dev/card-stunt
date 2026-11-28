@@ -111,13 +111,20 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
-  const isAuthenticated = authStore.isAuthenticated
 
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    return { name: 'login', query: { [REDIRECT_QUERY]: to.fullPath } }
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    // เปิดหน้าแรกไม่มี access token ใน memory → ลอง silent refresh (refresh cookie httpOnly)
+    try {
+      await authStore.bootstrap()
+    } catch {
+      /* ignore — refresh fail → login */
+    }
+    if (!authStore.isAuthenticated) {
+      return { name: 'login', query: { [REDIRECT_QUERY]: to.fullPath } }
+    }
   }
 
-  if (isAuthenticated && !authStore.user) {
+  if (authStore.isAuthenticated && !authStore.user) {
     try {
       await authStore.loadMe()
     } catch {
@@ -125,16 +132,16 @@ router.beforeEach(async (to) => {
     }
   }
 
-  if (to.path === '/login' && isAuthenticated) {
+  if (to.path === '/login' && authStore.isAuthenticated) {
     return getHomeRoute()
   }
 
-  if (isAuthenticated && authStore.mustChangePassword && to.name !== 'admin-password') {
+  if (authStore.isAuthenticated && authStore.mustChangePassword && to.name !== 'admin-password') {
     return { name: 'admin-password', query: { [REDIRECT_QUERY]: to.fullPath } }
   }
 
   const needPermission = to.meta.requiresPermission as string | undefined
-  if (needPermission && isAuthenticated && !authStore.hasPermission(needPermission)) {
+  if (needPermission && authStore.isAuthenticated && !authStore.hasPermission(needPermission)) {
     return getHomeRoute()
   }
 

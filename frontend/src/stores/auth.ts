@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as authService from '@/services/auth'
+import { accessToken } from '@/services/token'
 import { clearQueryCache } from '@/services/queryCache'
 import type { AuthUser } from '@/types/auth'
 
 export const useAuthStore = defineStore('auth', () => {
-  const accessToken = ref<string | null>(localStorage.getItem('access_token'))
   const user = ref<AuthUser | null>(null)
 
   const isAuthenticated = computed(() => !!accessToken.value)
@@ -16,14 +16,12 @@ export const useAuthStore = defineStore('auth', () => {
   const permissions = computed(() => user.value?.permissions || [])
   const mustChangePassword = computed(() => user.value?.must_change_password ?? false)
 
-  function setToken(token: string) {
+  function setToken(token: string | null) {
     accessToken.value = token
-    localStorage.setItem('access_token', token)
   }
 
-  function setUser(u: AuthUser) {
+  function setUser(u: AuthUser | null) {
     user.value = u
-    localStorage.setItem('user_id_str', String(u.id))
   }
 
   async function login(username: string, password: string): Promise<AuthUser> {
@@ -34,6 +32,17 @@ export const useAuthStore = defineStore('auth', () => {
     return res.user
   }
 
+  // เปิดหน้าใหม่ (F5) — ไม่มี access token ใน memory → ขอใหม่จาก refresh cookie (httpOnly)
+  async function bootstrap(): Promise<void> {
+    if (accessToken.value) {
+      if (!user.value) await loadMe()
+      return
+    }
+    const res = await authService.refresh()
+    setToken(res.access_token)
+    setUser(res.user)
+  }
+
   async function loadMe() {
     if (!accessToken.value) return null
     const me = await authService.fetchMe()
@@ -41,21 +50,21 @@ export const useAuthStore = defineStore('auth', () => {
     return me
   }
 
-  function markPasswordChanged() {
-    if (user.value) user.value.must_change_password = false
-  }
-
   function hasPermission(perm: string): boolean {
     if (isAdmin.value) return true
     return permissions.value.includes(perm)
   }
 
-  function logout() {
-    clearQueryCache()
-    accessToken.value = null
-    user.value = null
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('user_id_str')
+  async function logout() {
+    try {
+      await authService.logout()
+    } catch {
+      /* ignore — ล้างฝั่ง client ต่อให้ล้ม */
+    } finally {
+      clearQueryCache()
+      setToken(null)
+      setUser(null)
+    }
   }
 
   return {
@@ -70,8 +79,8 @@ export const useAuthStore = defineStore('auth', () => {
     setToken,
     setUser,
     login,
+    bootstrap,
     loadMe,
-    markPasswordChanged,
     hasPermission,
     logout,
   }

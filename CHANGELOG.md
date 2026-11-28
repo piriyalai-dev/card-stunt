@@ -32,6 +32,17 @@
 
 **Migration:** ไม่มี migration ใหม่
 
+### Fix — Wave 4 (JWT lifecycle: access + refresh) (2026-11-28)
+
+- เปลี่ยนจาก access token เดียวอายุ 30 วันใน localStorage → **access token สั้น (15 นาที) ใน memory + refresh token (7 วัน) ใน httpOnly cookie** (`SameSite=Lax`)
+- เพิ่ม `users.token_version` (migration 005) — bump ตอนเปลี่ยนรหัส ⇒ revoke ทุก session ทันที (access + refresh)
+- endpoint ใหม่: `POST /auth/refresh` (ขอ access token ใหม่) · `POST /auth/logout` (ล้าง refresh cookie)
+- `get_current_user` ตรวจ `type=access` + `ver` ตรง `token_version` (refresh token ใช้เป็น access ไม่ได้)
+- frontend: token เก็บใน memory (`services/token.ts`) · axios `withCredentials` + 401 silent-refresh retry · router guard bootstrap · change-password หลัง revoke พา login ใหม่
+- E2E: mock `POST /auth/refresh` (bootstrap)
+
+**Migration:** `005_token_version` — เพิ่ม `users.token_version INT NOT NULL DEFAULT 0`
+
 ## [0.4.0] — 2026-11-28 — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
 
 ### Phase 5 — Student Viewer PWA (2026-11-27)

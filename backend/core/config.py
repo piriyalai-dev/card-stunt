@@ -16,7 +16,13 @@ class Settings(BaseSettings):
     # JWT
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 days
+    # access token สั้น (ใช้ยิง API) · refresh token ยาว (เก็บใน httpOnly cookie) — ดู docs/4-developer-playbook
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
+
+    # refresh cookie (httpOnly) — ชื่อ + ความปลอดภัย (เปิด Secure เมื่อมี HTTPS)
+    REFRESH_COOKIE_NAME: str = "pixelstand_refresh"
+    REFRESH_COOKIE_SECURE: bool = False
 
     # Rate limit login (กัน brute-force) — per IP + per username, fixed window
     LOGIN_RATE_LIMIT_MAX: int = 10

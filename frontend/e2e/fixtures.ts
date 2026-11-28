@@ -200,6 +200,9 @@ export async function mockAdminApi(page: Page): Promise<AdminMock> {
   let liveCurrent: number | null = 101
 
   const handlers: Record<string, Handler> = {
+    // bootstrap (silent refresh) — หน้าแรกไม่มี access token ใน memory
+    'POST /api/v1/auth/refresh': (route) =>
+      fulfillJson(route, { access_token: 'e2e-token', user: authUser }),
     'GET /api/v1/auth/me': (route) => fulfillJson(route, authUser),
     'GET /api/v1/events/1': (route) => fulfillJson(route, eventAdmin),
     'GET /api/v1/events/1/stands': (route) => fulfillJson(route, [standAdmin]),

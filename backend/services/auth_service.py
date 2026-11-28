@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta, timezone
+import uuid
 
 import asyncpg
 import bcrypt
-from jose import jwt
+from jose import jwt, JWTError
 
 from core.config import settings
 from core.exceptions import ForbiddenError, NotFoundError
@@ -23,9 +24,50 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: int, token_version: int) -> str:
+    """access token สั้น (นาที) — ใช้ยิง API ผ่าน Authorization header · ฝัง `ver` เพื่อ revoke ได้."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode({"user_id": user_id, "exp": expire}, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    return jwt.encode(
+        {"user_id": user_id, "ver": token_version, "type": "access", "exp": expire},
+        settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM,
+    )
+
+
+def create_refresh_token(user_id: int, token_version: int) -> str:
+    """refresh token ยาว (วัน) — เก็บใน httpOnly cookie · ใช้ขอ access token ใหม่โดยไม่ login ซ้ำ."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(
+        {"user_id": user_id, "ver": token_version, "type": "refresh",
+         "jti": str(uuid.uuid4()), "exp": expire},
+        settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM,
+    )
+
+
+async def validate_refresh_token(pool: asyncpg.Pool, refresh_token: str):
+    """ตรวจ refresh token (type + exp + `ver` ตรง DB) → คืน user record หรือ raise ForbiddenError.
+
+    ⚠️ `ver` != users.token_version ⇒ session ถูกเพิกถอน (เปลี่ยนรหัส/logout-all) ⇒ 401
+    """
+    try:
+        payload = jwt.decode(refresh_token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except JWTError:
+        raise ForbiddenError("refresh token ไม่ถูกต้องหรือหมดอายุ")
+    if payload.get("type") != "refresh":
+        raise ForbiddenError("token ไม่ใช่ refresh token")
+    user_id = payload.get("user_id")
+    ver = payload.get("ver")
+    if user_id is None or ver is None:
+        raise ForbiddenError("refresh token ไม่สมบูรณ์")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, username, display_name, role, must_change_password, token_version"
+            " FROM users WHERE id = $1 AND deleted_at IS NULL",
+            user_id,
+        )
+    if row is None or int(row["token_version"]) != int(ver):
+        raise ForbiddenError("เซสชันถูกเพิกถอน — กรุณาเข้าสู่ระบบใหม่")
+    return row
 
 
 async def authenticate_user(pool: asyncpg.Pool, username: str, password: str) -> int:
@@ -71,7 +113,8 @@ async def change_password(pool: asyncpg.Pool, user_id: int, old_password: str, n
             if not verify_password(old_password, row["password_hash"]):
                 raise ForbiddenError("รหัสผ่านเดิมไม่ถูกต้อง")
             await conn.execute(
-                "UPDATE users SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE id = $2",
+                "UPDATE users SET password_hash = $1, must_change_password = FALSE,"
+                " token_version = token_version + 1, updated_at = NOW() WHERE id = $2",
                 hash_password(new_password), user_id,
             )
             await AuditLogger("auth").log(
@@ -83,7 +126,7 @@ async def change_password(pool: asyncpg.Pool, user_id: int, old_password: str, n
 async def get_user_by_id(pool: asyncpg.Pool, user_id: int):
     async with pool.acquire() as conn:
         return await conn.fetchrow(
-            "SELECT id, username, display_name, role, must_change_password"
+            "SELECT id, username, display_name, role, must_change_password, token_version"
             " FROM users WHERE id = $1 AND deleted_at IS NULL",
             user_id,
         )

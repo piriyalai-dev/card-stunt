@@ -110,8 +110,12 @@ async def test_must_change_password_gate(client, db_pool):
                       json={"old_password": "secret123", "new_password": "newpass789"},
                       headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
-    # หลังเปลี่ยนรหัส ใช้ endpoint อื่นได้แล้ว (gate อ่าน flag จาก DB ทุก request)
-    assert client.get("/api/v1/users", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    # หลังเปลี่ยนรหัส session เดิมถูก revoke (token_version bump) — token เก่าใช้ไม่ได้แล้ว
+    assert client.get("/api/v1/users", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+    # login ใหม่ด้วยรหัสใหม่ → gate ถูกเคลียร์แล้ว (must_change_password=FALSE)
+    new_token = client.post("/api/v1/auth/login",
+                            json={"username": "forced_change", "password": "newpass789"}).json()["access_token"]
+    assert client.get("/api/v1/users", headers={"Authorization": f"Bearer {new_token}"}).status_code == 200
 
 
 # === password policy ===
@@ -187,6 +191,51 @@ async def test_change_password_is_audited(client, db_pool, admin_user):
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow("SELECT 1 FROM audit_logs WHERE action = 'CHANGE_PASSWORD'")
     assert row is not None
+
+
+# === refresh / logout / revoke (Wave 4) ===
+@pytest.mark.asyncio
+async def test_refresh_token_flow(client, admin_user):
+    # login ตั้ง refresh cookie (httpOnly)
+    res = client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "secret123"})
+    assert res.status_code == 200
+    assert res.cookies.get("pixelstand_refresh") is not None
+
+    # refresh → access token ใหม่ (TestClient ส่ง cookie เดิมให้อัตโนมัติ)
+    refresh = client.post("/api/v1/auth/refresh")
+    assert refresh.status_code == 200, refresh.text
+    assert refresh.json()["access_token"]
+    assert refresh.json()["user"]["username"] == "admin_test"
+
+    # access token ใหม่ใช้ได้
+    token = refresh.json()["access_token"]
+    assert client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_refresh_without_cookie_401(client):
+    assert client.post("/api/v1/auth/refresh").status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_logout_clears_refresh_cookie(client, admin_user):
+    client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "secret123"})
+    assert client.post("/api/v1/auth/logout").status_code == 200
+    # หลัง logout refresh cookie ถูกเคลียร์ → refresh ต้อง 401
+    assert client.post("/api/v1/auth/refresh").status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_password_change_revokes_session(client, admin_user):
+    login = client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "secret123"})
+    token = login.json()["access_token"]
+    assert client.post("/api/v1/auth/change-password",
+                       json={"old_password": "secret123", "new_password": "newpass456"},
+                       headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    # access token เดิมถูก revoke
+    assert client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+    # refresh cookie เดิมก็ถูก revoke
+    assert client.post("/api/v1/auth/refresh").status_code == 401
 
 
 # === RBAC ===

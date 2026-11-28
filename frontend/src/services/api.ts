@@ -1,5 +1,6 @@
 import axios, { type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 import { REDIRECT_QUERY, safeRedirect } from '@/router/redirect';
+import { accessToken } from './token';
 import {
   buildCacheKey,
   clearQueryCache,
@@ -34,6 +35,8 @@ export interface ApiError extends Error {
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  // ส่ง cookie (refresh token httpOnly) ไปกับทุก request — ใช้กับ /auth/refresh
+  withCredentials: true,
   headers: {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
@@ -48,7 +51,7 @@ export const api = axios.create({
  */
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const token = accessToken.value;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -154,6 +157,31 @@ export function loginUrlRemembering(pathname: string, search: string): string {
   return `/login?${REDIRECT_QUERY}=${encodeURIComponent(target)}`;
 }
 
+// ── silent refresh ─────────────────────────────────────────────────
+// access token หมดอายุ (401) → ขอ access token ใหม่ด้วย refresh cookie (httpOnly)
+// ผ่าน fetch ตรง ๆ (ไม่ผ่าน axios) เพื่อกัน interceptor วนซ้ำ · dedupe ด้วย promise ตัวเดียว
+let refreshPromise: Promise<boolean> | null = null;
+
+function tryRefresh(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const res = await fetch(`${base}/api/v1/auth/refresh`, { method: 'POST', credentials: 'include' });
+        if (!res.ok) return false;
+        const data = (await res.json()) as { access_token: string };
+        accessToken.value = data.access_token;
+        return true;
+      } catch {
+        return false;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+  return refreshPromise;
+}
+
 // Interceptor ขาเข้า: จัดการ Error และดักจับ 401
 let isRedirectingToLogin = false;
 
@@ -164,11 +192,24 @@ api.interceptors.response.use(
   async (error) => {
     if (error.response) {
       if (error.response.status === 401) {
-        // เคลียร์ Session ทั้งหมด (ไม่ใช่แค่ token) เพื่อป้องกัน redirect วนลูป
-        // + ล้าง cache กันข้อมูลของผู้ใช้คนก่อนโผล่ให้คนถัดไปในแท็บเดียวกัน
+        const config = error.config as InternalAxiosRequestConfig & { __retried?: boolean };
+        const url = config?.url ?? '';
+        const isAuthCall = url.includes('/auth/login') || url.includes('/auth/refresh') || url.includes('/auth/logout');
+
+        // access token หมดอายุ → ลอง silent refresh แล้ว retry ครั้งเดียว
+        if (!config?.__retried && !isAuthCall) {
+          const ok = await tryRefresh();
+          if (ok) {
+            config.__retried = true;
+            config.headers = config.headers ?? {};
+            config.headers.Authorization = `Bearer ${accessToken.value}`;
+            return api.request(config);
+          }
+        }
+
+        // refresh ล้มเหลว (ไม่มี cookie / ถูก revoke) → เคลียร์ session + กลับ login
         clearQueryCache();
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('user_id_str');
+        accessToken.value = null;
 
         if (!isRedirectingToLogin && !window.location.pathname.startsWith('/login')) {
           isRedirectingToLogin = true;

@@ -23,8 +23,9 @@ async function submit() {
   loading.value = true
   try {
     await authService.changePassword(oldPassword.value, newPassword.value)
-    authStore.markPasswordChanged()
-    await router.push({ name: 'admin-home' })
+    // เปลี่ยนรหัส = revoke ทุก session (token_version bump) → ต้องเข้าสู่ระบบใหม่ด้วยรหัสใหม่
+    await authStore.logout()
+    await router.push({ name: 'login' })
   } catch (e) {
     error.value = (e as Error).message || 'เปลี่ยนรหัสผ่านไม่สำเร็จ'
   } finally {
