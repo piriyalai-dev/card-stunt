@@ -2,9 +2,9 @@
 /**
  * 🔦 Focus / Show mode — กล่องสีใหญ่ + รหัสยักษ์ สำหรับถือใช้งานกลางแสตน
  *
- * - ตามคิวสด (SSE) ได้ แต่ผู้ใช้ยังเลื่อนเองได้เสมอ (ปิดสวิตช์ "ตามคิวสด")
+ * - ตามคิวสด (SSE) เสมอ — ผู้คุมคือแหล่งความจริง เมื่อ advance ผู้ชมตามทันที
  * - Screen Wake Lock เปิดอัตโนมัติ; ถ้าเบราว์เซอร์ไม่รองรับจะซ่อนสวิตช์
- * - ปัดซ้าย/ขวา หรือลูกศรคีย์บอร์ด = เปลี่ยนฉาก
+ * - ปัดซ้าย/ขวา หรือลูกศรคีย์บอร์ด = เปลี่ยนฉาก (โดนคิวสดดึงกลับเมื่อผู้คุม advance)
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import PlateGrid from './PlateGrid.vue'
@@ -23,7 +23,6 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'close'): void }>()
 
 const colors = computed(() => colorIndex(props.seat.palettes))
-const followLive = ref(props.liveActive)
 
 function clampIndex(value: number): number {
   const max = props.seat.stunts.length - 1
@@ -52,30 +51,28 @@ function prev(): void {
   const total = props.seat.stunts.length
   if (!total) return
   index.value = (index.value - 1 + total) % total
-  followLive.value = false
 }
 
 function nextCueStep(): void {
   const total = props.seat.stunts.length
   if (!total) return
   index.value = (index.value + 1) % total
-  followLive.value = false
 }
 
 function jump(value: number): void {
   index.value = clampIndex(value)
-  followLive.value = false
 }
 
 function onSelectChange(event: Event): void {
   jump(Number((event.target as HTMLSelectElement).value))
 }
 
-// ── ตามคิวสด ──────────────────────────────────────────────────────
+// ── ตามคิวสด (บังคับ) ─────────────────────────────────────────────
+// ผู้คุมคือแหล่งความจริง — advance แล้วดึง index ตามทันทีเสมอ ไม่มี opt-out
 watch(
   () => props.liveStuntId,
   (stuntId) => {
-    if (!followLive.value || !props.liveActive || stuntId === null) return
+    if (!props.liveActive || stuntId === null) return
     const found = props.seat.stunts.findIndex((s) => s.id === stuntId)
     if (found >= 0) index.value = found
   },
@@ -85,9 +82,6 @@ watch(
   () => props.liveActive,
   (active) => {
     if (!active) return
-    // งานเพิ่งเริ่มคิวสด (หรือกลับมาออนไลน์) ⇒ กลับมาตามคิวโดยอัตโนมัติ
-    // — การเลื่อนเองของผู้ใช้ยังปิด followLive ตามปกติ (ดู prev/next/jump)
-    followLive.value = true
     if (props.liveStuntId !== null) {
       const found = props.seat.stunts.findIndex((s) => s.id === props.liveStuntId)
       if (found >= 0) index.value = found
@@ -160,12 +154,11 @@ onUnmounted(() => {
 
       <span
         v-if="liveActive"
-        class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold"
-        :class="followLive ? 'bg-brand-tint text-brand' : 'bg-canvas text-ink-3'"
-        :title="followLive ? 'กำลังตามคิวสด' : 'ปิดการตามคิวสด'"
+        class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold bg-brand-tint text-brand"
+        title="กำลังตามคิวสด"
       >
         <i class="bi bi-broadcast" aria-hidden="true" />
-        {{ followLive ? 'คิวสด' : 'เอง' }}
+        คิวสด
       </span>
 
       <button

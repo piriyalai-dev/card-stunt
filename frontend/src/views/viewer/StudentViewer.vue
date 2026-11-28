@@ -136,6 +136,20 @@ function startLive(): void {
   })
 }
 
+// ผู้คุม advance แล้วต้องตามทันที แม้ผู้ชมอยู่หน้าโพย (list) — ดึงเข้าโฟกัสที่ฉากล่าสุด
+watch(
+  () => liveStuntId.value,
+  (stuntId) => {
+    if (!liveActive.value || stuntId === null || !seat.value) return
+    if (view.value === 'focus') return
+    const found = seat.value.stunts.findIndex((s) => s.id === stuntId)
+    if (found >= 0) {
+      focusIndex.value = found
+      view.value = 'focus'
+    }
+  },
+)
+
 async function refreshData(reason?: string): Promise<void> {
   if (!slug.value) return
   try {
