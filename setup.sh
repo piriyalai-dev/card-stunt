@@ -39,7 +39,7 @@ if [ ! -f .env ]; then
 fi
 set -a; . ./.env; set +a
 
-for v in API_DOMAIN WEB_DOMAIN POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB VITE_API_BASE_URL; do
+for v in API_DOMAIN WEB_DOMAIN POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB API_KEY SECRET_KEY JWT_SECRET VITE_API_BASE_URL; do
     if [ -z "${!v:-}" ]; then red "❌ ยังไม่ได้ตั้ง $v ใน .env"; exit 1; fi
 done
 green "   ✔ โหลด .env แล้ว"
@@ -67,6 +67,21 @@ if docker ps --format '{{.Image}}' | grep -qiE '(^|/)traefik[:@]'; then
 else
     yellow "   ⚠️ ยังไม่พบ Traefik — ติดตั้งครั้งเดียวต่อเครื่อง: ./setup_traefik.sh"
 fi
+
+step "สร้าง Docker Secrets (idempotent — credential ออกจาก env)"
+ensure_secret() {
+    local name="$1" var="$2"
+    if docker secret inspect "$name" >/dev/null 2>&1; then
+        green "   ✔ Secret $name มีอยู่แล้ว"
+    else
+        printf '%s' "${!var}" | docker secret create "$name" -
+        green "   ✔ สร้าง secret $name (จาก \$$var)"
+    fi
+}
+ensure_secret pixelstand_postgres_password POSTGRES_PASSWORD
+ensure_secret pixelstand_api_key API_KEY
+ensure_secret pixelstand_secret_key SECRET_KEY
+ensure_secret pixelstand_jwt_secret JWT_SECRET
 
 step "4/5 Deploy Infrastructure (PostgreSQL + Redis)"
 docker stack deploy -c docker-compose.infra.yml "$STACK_INFRA"

@@ -1,5 +1,23 @@
+import os
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _read_secret(name: str) -> str | None:
+    """อ่าน Docker secret (mount ที่ /run/secrets/<name>) — คืน None ถ้าไม่มี/ว่าง.
+
+    ใช้กับค่า sensitive (API_KEY / SECRET_KEY / JWT_SECRET / DB password) ที่ควรอยู่เป็น
+    swarm secret แทน env ⇒ ไม่โผล่ใน `docker service inspect` · บน host/ทดสอบไม่มีไฟล์นี้
+    ⇒ fallback ไป env ตามเดิม (backward compatible)
+    """
+    path = f"/run/secrets/{name}"
+    try:
+        with open(path, encoding="utf-8") as f:
+            value = f.read().strip()
+        return value or None
+    except OSError:
+        return None
 
 
 class Settings(BaseSettings):
@@ -9,12 +27,13 @@ class Settings(BaseSettings):
     GIT_SHA: str = "unknown"
 
     DATABASE_URL: str
-    API_KEY: str
-    SECRET_KEY: str
+    # secrets — ค่าเริ่มต้น "" แล้ว validator อ่าน /run/secrets/<name> ถ้า env ว่าง (ดู _secret_or_required)
+    API_KEY: str = ""
+    SECRET_KEY: str = ""
     SUPER_ADMIN_ID: int = 0
 
     # JWT
-    JWT_SECRET: str
+    JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
     # access token สั้น (ใช้ยิง API) · refresh token ยาว (เก็บใน httpOnly cookie) — ดู docs/4-developer-playbook
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
@@ -91,6 +110,40 @@ class Settings(BaseSettings):
         """
         if value is None or (isinstance(value, str) and value.strip() == ""):
             return 0
+        return value
+
+    @field_validator("API_KEY", "SECRET_KEY", "JWT_SECRET", mode="after")
+    @classmethod
+    def _secret_or_required(cls, value, info):
+        """ค่า sensitive — อ่านจาก swarm secret ก่อน ถ้า env ว่าง แล้วค่อยบังคับ.
+
+        Docker secret mount ที่ `/run/secrets/pixelstand_<field_name.lower()>` (เช่น
+        `API_KEY` → `/run/secrets/pixelstand_api_key`) · ถ้าไม่มีทั้ง env และ secret → error
+        ตอน boot (เหมือน field required เดิม)
+        """
+        if value:
+            return value
+        secret = _read_secret(f"pixelstand_{info.field_name.lower()}")
+        if secret:
+            return secret
+        raise ValueError(f"{info.field_name} ไม่ถูกตั้ง — ใส่ใน .env หรือ Docker secret")
+
+    @field_validator("DATABASE_URL", mode="after")
+    @classmethod
+    def _inject_db_password(cls, value):
+        """DATABASE_URL ที่ไม่มี password (`user@host/db`) → ต่อ password จาก secret/env.
+
+        compose ตั้ง URL โดยไม่ฝัง password ⇒ backend ประกอบ password เองจาก
+        `pixelstand_postgres_password` (secret) หรือ `POSTGRES_PASSWORD` (env)
+        """
+        if not value:
+            return value
+        password = _read_secret("pixelstand_postgres_password") or os.environ.get("POSTGRES_PASSWORD", "")
+        if password and "://" in value:
+            scheme, rest = value.split("://", 1)
+            userinfo, sep, hostport = rest.partition("@")
+            if sep and ":" not in userinfo:
+                return f"{scheme}://{userinfo}:{password}@{hostport}"
         return value
 
     model_config = SettingsConfigDict(

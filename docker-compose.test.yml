@@ -44,8 +44,8 @@ services:
       - MEDIA_STORAGE_DIR=/tmp/pixelstand_media
       - EXPORT_STORAGE_DIR=/tmp/pixelstand_exports
       - PYTHONPATH=/app
-    entrypoint: ["/bin/sh", "-c", "export PYTHONDONTWRITEBYTECODE=1 && python -m pip install --no-cache-dir pytest pytest-asyncio && exec \"$@\"", "test_runner"]
-    command: ["pytest", "/app/tests", "-v"]
+    entrypoint: ["/bin/sh", "-c", "export PYTHONDONTWRITEBYTECODE=1 && python -m pip install --no-cache-dir pytest pytest-asyncio pytest-cov && exec \"$@\"", "test_runner"]
+    command: ["pytest", "/app/tests", "-v", "--cov=core", "--cov=services", "--cov=routers", "--cov=workers", "--cov-report=term-missing"]
     depends_on:
       test_db:
         condition: service_healthy

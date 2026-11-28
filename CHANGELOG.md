@@ -71,6 +71,15 @@
 
 **Migration:** ไม่มี migration ใหม่
 
+### Feat — Wave 7 (P5 deploy hardening) (2026-11-28)
+
+- **Docker secrets**: ย้าย `POSTGRES_PASSWORD/API_KEY/SECRET_KEY/JWT_SECRET` ออกจาก env เป็น swarm secret — `core/config.py` เพิ่ม `_read_secret` + validator (`_secret_or_required`, `_inject_db_password`) · infra db ใช้ `POSTGRES_PASSWORD_FILE` · app backend/worker mount 4 secrets + `environment:` override ค่า sensitive เป็นว่าง · `setup.sh`/`pull_all.sh` สร้าง secret idempotent (`ensure_secret`)
+- **Resource limits**: `deploy.resources.limits/reservations` ทั้ง 5 services (backend 1G · worker 2G · frontend 128M · db 1G · redis 256M)
+- **Coverage**: test_runner รัน pytest `--cov=core --cov=services --cov=routers --cov=workers` (report ขึ้น CI log)
+- test: `tests/test_config.py` — secret field ว่าง→error · URL password injection · URL ที่มี password ไม่ถูกแตะ
+
+**Migration:** ไม่มี migration ใหม่
+
 ## [0.4.0] — 2026-11-28 — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
 
 ### Phase 5 — Student Viewer PWA (2026-11-27)

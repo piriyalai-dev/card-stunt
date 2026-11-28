@@ -1,11 +1,12 @@
-# Production Hardening — checklist ที่ยังไม่ได้ทำ (Wave 3+)
+# Production Hardening — checklist
 
-> งาน 3 อย่างที่เหลือของ "deploy swarm จริง" — แต่ละอย่างแตะ infra ที่แชร์กับทั้งเครื่อง
-> หรือเปลี่ยนสัญญา deploy ⇒ **ต้องทำอย่างระวัง** และบางข้อต้องสิทธิ์ root/เจ้าของเครื่อง
+> งานของ "deploy swarm จริง" — **Wave 7 ทำแล้ว:** Docker secrets · resource limits · coverage
+> **เหลือแค่ HTTPS** (ข้อ 1) ที่แตะ `global_proxy` traefik ที่แชร์กับทั้งเครื่อง ⇒ ต้องทำอย่างระวัง
+> + สิทธิ์ root/เจ้าของเครื่อง (ดู `~/CLAUDE.md`)
 
 ---
 
-## 1. 🔒 HTTPS / ACME (ใหญ่สุด — แตะ `global_proxy` traefik ที่แชร์)
+## 1. 🔒 HTTPS / ACME (ยังไม่ได้ทำ — แตะ `global_proxy` traefik ที่แชร์)
 
 **สถานะตอนนี้:** `global_proxy` traefik (`~/ops/deploy/traefik-proxy/docker-compose.yml`)
 มีแค่ entrypoint `web` (`:80`) · **ไม่มี** `:443` · **ไม่มี** certresolver ⇒ JWT/รหัสผ่าน/โพย
@@ -43,64 +44,52 @@
    (`entrypoints=websecure` + `tls=true` + `tls.certresolver=letsencrypt`) ของทั้ง backend/frontend
    · `./pull_all.sh` redeploy · แล้วเช็ค `https://pixel.singto1597.xyz`
 5. **อัปเดต `CORS_ORIGINS` + `VITE_API_BASE_URL`** ให้เป็น `https://…` แล้ว rebuild frontend
+   · เปิด `REFRESH_COOKIE_SECURE=true` (cookie ต้อง secure บน HTTPS)
 
 ---
 
-## 2. 🔐 Docker secrets (ย้าย credential ออกจาก `env_file`)
+## 2. 🔐 Docker secrets ✅ (Wave 7)
 
-**สถานะ:** `POSTGRES_PASSWORD / API_KEY / SECRET_KEY / JWT_SECRET` อยู่ใน `env_file: .env`
-⇒ โผล่ใน `docker service inspect` + env ของ container · ควรย้ายเป็น swarm `secret`
+ย้าย `POSTGRES_PASSWORD / API_KEY / SECRET_KEY / JWT_SECRET` ออกจาก env เป็น swarm secret
 
-**หมายเหตุ:** ยังมี password ฝังใน `DATABASE_URL` (backend) อยู่ — การทำ secrets เต็มตัวต้องให้
-backend อ่าน password จาก `_FILE` แล้วประกอบ URL เอง (แก้ `core/config.py`) · งานนี้ยังไม่ทำ
+- **`core/config.py`**: `_read_secret(name)` อ่าน `/run/secrets/<name>` · validator `_secret_or_required`
+  (API_KEY/SECRET_KEY/JWT_SECRET: secret → env → error ตอน boot) · `_inject_db_password` ต่อ password
+  ลง `DATABASE_URL` ที่ไม่มี password (`user@host/db`)
+- **`docker-compose.infra.yml`**: db ใช้ `POSTGRES_PASSWORD_FILE=/run/secrets/pixelstand_postgres_password`
+  (postgres image อ่าน password จาก secret โดยตรง)
+- **`docker-compose.app.yml`**: backend/worker mount 4 secrets · `environment:` override ค่า sensitive
+  เป็นว่าง + `DATABASE_URL` ไม่มี password ⇒ `core/config.py` อ่าน secret แทน
+- **`setup.sh` / `pull_all.sh`**: `ensure_secret()` สร้าง 4 secrets แบบ idempotent ก่อน deploy
+- **test**: `tests/test_config.py` — secret field ว่าง+ไม่มี secret → error · URL injection / ไม่แตะ URL ที่มี password
 
-### ขั้นตอน (แนวทาง)
-
-```bash
-# สร้าง secret ครั้งเดียว (ค่ามาจาก .env)
-printf '%s' "$POSTGRES_PASSWORD" | docker secret create pixelstand_postgres_password -
-printf '%s' "$API_KEY"           | docker secret create pixelstand_api_key -
-printf '%s' "$SECRET_KEY"        | docker secret create pixelstand_secret_key -
-printf '%s' "$JWT_SECRET"        | docker secret create pixelstand_jwt_secret -
-```
-
-- `docker-compose.infra.yml` db: `secrets: [pixelstand_postgres_password]` + `POSTGRES_PASSWORD_FILE=/run/secrets/pixelstand_postgres_password`
-- `docker-compose.app.yml` backend/worker: mount secret แล้วอ่านใน `core/config.py` (pydantic รับ `_FILE` ไม่ได้โดยตรง ⇒ ต้อง wrapper)
-- `setup.sh` เพิ่ม `docker secret create` (idempotent: `docker secret inspect` ก่อน)
+> ⚠️ secret เป็น `external: true` ⇒ ต้องถูกสร้างก่อน deploy (scripts ทำแล้ว) · ถ้าสร้างไม่ทัน
+> `docker stack deploy` fail ชัดเจน (ไม่ silent)
 
 ---
 
-## 3. 📐 Resource limits (กัน OOM บนเครื่องที่แชร์ RAM)
+## 3. 📐 Resource limits ✅ (Wave 7)
 
-**สถานะ:** compose ไม่มี `deploy.resources` เลย ⇒ container ใช้ RAM ได้ไม่จำกัด
-· เครื่องนี้ RAM 11.68 GB แชร์กับ `cmskrulak` (25%) + claude session (~20%) ⇒ ควรตั้งเพดาน
+`deploy.resources.limits/reservations` ใน compose ทั้งสองไฟล์ — ค่าเริ่มต้น (วัด `docker stats` ปรับทีหลัง):
 
-**แนวทาง (ค่าเริ่มต้น — ปรับตามโหลดจริง):**
+| service | limits (cpu / mem) | reservations |
+|---|---|---|
+| backend | 1.0 / 1G | 0.25 / 256M |
+| worker (PDF) | 1.5 / 2G | 0.25 / 256M |
+| frontend | 0.5 / 128M | 0.1 / 32M |
+| db | 1.0 / 1G | 0.25 / 256M |
+| redis | 0.5 / 256M | 0.1 / 32M |
 
-```yaml
-# worker (PDF = กิน RAM ที่สุด)
-deploy:
-  resources:
-    limits:   { cpus: '1.0', memory: 2G }
-    reservations: { cpus: '0.25', memory: 256M }
-
-# backend
-deploy:
-  resources:
-    limits:   { cpus: '1.0', memory: 1G }
-    reservations: { cpus: '0.25', memory: 256M }
-```
-
-⚠️ ตั้ง `limits.memory` ต่ำเกิน → `Exited 137` (OOM kill) · ตั้งจาก **working set จริง** ไม่ใช่เดา
-· วัดก่อนด้วย `docker stats` หลัง deploy · worker ที่ export PDF 5,000 ที่นั่งเป็นตัวเสี่ยงสุด
+⚠️ `limits.memory` ต่ำเกิน → `Exited 137` (OOM kill) · ตั้งจาก **working set จริง** ไม่ใช่เดา
+· worker ที่ export PDF 5,000 ที่นั่งเสี่ยงสุด · วัดด้วย `docker stats` หลัง deploy แล้วปรับ
 
 ---
 
-## 4. ✅ Checklist ที่ทำแล้ว (Wave 3)
+## 4. ✅ Checklist
 
 - [x] CI รันเทสต์จริง (`.github/workflows/ci-tests.yml`: backend pytest + frontend 4 gates + E2E)
 - [x] healthcheck: infra db (`pg_isready`) + redis (`redis-cli ping`) + frontend (nginx `wget`)
 - [x] `.env.example` ครบทุก `Settings` field ที่มีผล (JWT/cache/media/roster/seed)
+- [x] Docker secrets (ข้อ 2) — `core/config.py` + compose + setup/pull_all
+- [x] Resource limits (ข้อ 3) — `deploy.resources` ทั้ง 5 services
+- [x] Coverage (Wave 7) — test_runner รัน pytest `--cov` (report ขึ้น CI log)
 - [ ] HTTPS (ข้อ 1) — รอตัดสินใจ + แตะ shared traefik
-- [ ] Docker secrets (ข้อ 2) — รอตัดสินใจ + แก้ `core/config.py`
-- [ ] Resource limits (ข้อ 3) — วัด working set จริงก่อนตั้ง

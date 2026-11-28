@@ -5,8 +5,13 @@ version: "3.8"
 services:
   db:
     image: postgres:16-alpine
-    env_file:
-      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}
+      # postgres image อ่าน password จากไฟล์นี้ (ไม่ต้องฝังใน env)
+      - POSTGRES_PASSWORD_FILE=/run/secrets/pixelstand_postgres_password
+    secrets:
+      - pixelstand_postgres_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -19,6 +24,9 @@ services:
       start_period: 20s
     deploy:
       replicas: 1
+      resources:
+        limits: { cpus: '1.0', memory: 1G }
+        reservations: { cpus: '0.25', memory: 256M }
 
   redis:
     image: redis:7-alpine
@@ -34,6 +42,9 @@ services:
       retries: 5
     deploy:
       replicas: 1
+      resources:
+        limits: { cpus: '0.5', memory: 256M }
+        reservations: { cpus: '0.1', memory: 32M }
 
 volumes:
   # ชื่อ volume คงที่ (single environment — ไม่มี ENV_NAME แบบ prsc)
@@ -41,6 +52,10 @@ volumes:
     name: pixelstand_postgres_data
   redis_data:
     name: pixelstand_redis_data
+
+secrets:
+  pixelstand_postgres_password:
+    external: true
 
 networks:
   pixelstand-internal:

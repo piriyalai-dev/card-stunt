@@ -53,6 +53,21 @@ done
 echo "✅ image ครบพร้อม deploy"
 
 # 7. Deploy (zero-downtime)
+echo "🔐 Docker secrets (idempotent)..."
+ensure_secret() {
+    local name="$1" var="$2"
+    if docker secret inspect "$name" >/dev/null 2>&1; then
+        echo "   ✔ Secret $name มีอยู่แล้ว"
+    else
+        printf '%s' "${!var}" | docker secret create "$name" -
+        echo "   ✔ สร้าง secret $name (จาก \$$var)"
+    fi
+}
+ensure_secret pixelstand_postgres_password POSTGRES_PASSWORD
+ensure_secret pixelstand_api_key API_KEY
+ensure_secret pixelstand_secret_key SECRET_KEY
+ensure_secret pixelstand_jwt_secret JWT_SECRET
+
 echo "🚀 Deploy stack pixelstand_app..."
 docker stack deploy -c docker-compose.app.yml pixelstand_app
 
