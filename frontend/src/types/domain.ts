@@ -260,3 +260,66 @@ export interface LiveAdminState {
   is_active: boolean
   stunt_ids: number[]
 }
+
+// ── User management (admin — MANAGE_USERS) ────────────────────────
+
+export type UserRole = 'admin' | 'designer' | 'staff'
+
+export interface UserOut {
+  id: number
+  username: string
+  display_name: string | null
+  role: UserRole
+  is_admin: boolean
+  permissions: string[]
+  must_change_password: boolean
+}
+
+export interface UserCreate {
+  username: string
+  password: string
+  display_name?: string | null
+  role?: UserRole
+}
+
+export interface UserUpdate {
+  display_name?: string | null
+  role?: UserRole
+  password?: string
+}
+
+// ── Audit log (admin — VIEW_AUDIT_LOG) ────────────────────────────
+
+export interface AuditLogOut {
+  id: number
+  trace_id: string | null
+  user_id: number | null
+  actor_identifier: string
+  client_source: string
+  service_name: string
+  action: string
+  entity_type: string | null
+  entity_id: string | null
+  status: string
+  error_detail: string | null
+  old_values: unknown
+  new_values: unknown
+  endpoint_or_command: string | null
+  ip_address: string | null
+  user_agent: string | null
+  execution_time_ms: number | null
+  created_at: string
+}
+
+export interface AuditLogPage {
+  items: AuditLogOut[]
+  next_cursor: string | null
+  has_more: boolean
+}
+
+export interface AuditLogOptions {
+  actions: string[]
+  statuses: string[]
+  entity_types: string[]
+  service_names: string[]
+}

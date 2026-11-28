@@ -54,6 +54,23 @@
 
 **Migration:** ไม่มี migration ใหม่
 
+### Feat — Wave 6 (docs port + P3 features) (2026-11-28)
+
+#### Docs — ย้าย lessons + กฎจาก Pirivoice (กรองเอาเฉพาะของทั่วไป)
+
+- `docs/skills.md` ใหม่: คลังบทเรียน **226 entries** จาก `prsc_portal/docs/skills.md` — ตัด domain เฉพาะ PIRIvoice 25 ตัว · แปลงตัวอย่าง domain ให้เป็นกลาง (rooms→lookup tables, issues→records) + ต่อท้ายด้วยบทเรียนเฉพาะ Pixel Stand (openpyxl `.xls` · Excel float `.0` · health 503 · JWT access+refresh+`token_version` · media orphan · login enumeration · docker no-DNS)
+- `docs/rules/{backend,frontend,testing}.md` เสริมจาก Pirivoice: `FOR UPDATE` กัน race · `response_model` ทุก endpoint · error mapping ตาราง · audit ต้องใน transaction · "ว่าง ≠ พัง ≠ โหลดไม่เสร็จ" · deep DB verify · mock เฉพาะขอบ process · 400 vs 422 · กฎ "บันทึกบทเรียนลง skills.md"
+
+#### P3 features
+
+- **PWA install prompt**: `InstallPrompt.vue` (ชวนติดตั้ง + แจ้งเวอร์ชันใหม่ + iOS hint) ต่อกับ state machine ใน `pwa.ts` เดิม (เดิมมี logic ครบแต่ไม่มี component) — mount ที่ `App.vue`
+- **จัดการผู้ใช้** (`MANAGE_USERS`): หน้า `/admin/users` + `services/users.ts` (สร้าง/แก้ role/ reset password/ลบ)
+- **บันทึกการใช้งาน** (`VIEW_AUDIT_LOG`): หน้า `/admin/audit` + `services/audit.ts` (filter action/service/status/entity + ค้นหา + cursor pagination)
+- **ดาวน์โหลด PNG ฉาก**: ปุ่มใน Pixel Studio — `lib/renderer.ts::exportGridPngDataUrl`
+- **QR แชร์ลิงก์ผู้ชม**: `QrCode.vue` (lib `qrcode`) ใน EventOverview พร้อมคัดลอก/เปิดลิงก์
+
+**Migration:** ไม่มี migration ใหม่
+
 ## [0.4.0] — 2026-11-28 — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
 
 ### Phase 5 — Student Viewer PWA (2026-11-27)

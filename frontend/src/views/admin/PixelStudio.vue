@@ -35,7 +35,7 @@ import {
   type GridChange,
   type Region,
 } from '@/lib/grid'
-import { lookupFromColors } from '@/lib/renderer'
+import { exportGridPngDataUrl, lookupFromColors } from '@/lib/renderer'
 import { absoluteApiUrl } from '@/services/publicApi'
 import * as palettesService from '@/services/palettes'
 import * as standsService from '@/services/stands'
@@ -174,6 +174,17 @@ const blocked = computed(
 
 function currentGrid(): Grid {
   return side.value === 'a' ? gridA.value : gridB.value
+}
+
+/** ดาวน์โหลดกริดด้านที่กำลังดูเป็น PNG (8 px ต่อช่อง) */
+function downloadPng(): void {
+  const grid = currentGrid()
+  if (!grid.length || !gridW.value || !gridH.value) return
+  const url = exportGridPngDataUrl(grid, gridW.value, gridH.value, lookup.value, 8)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${stunt.value?.code ?? 'stunt'}-${side.value}.png`
+  a.click()
 }
 
 function historyFor(target: Side): GridHistory {
@@ -1215,6 +1226,10 @@ function setTool(next: Tool) {
       <AppButton size="sm" :loading="saving" :disabled="!canEdit || !dirty" @click="save">
         <template #icon><i class="bi bi-cloud-arrow-up" aria-hidden="true" /></template>
         บันทึก
+      </AppButton>
+      <AppButton size="sm" variant="secondary" :disabled="!canEdit" @click="downloadPng">
+        <template #icon><i class="bi bi-download" aria-hidden="true" /></template>
+        PNG
       </AppButton>
     </div>
 

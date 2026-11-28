@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from 'vue-router';
+import InstallPrompt from '@/components/InstallPrompt.vue';
 
 const route = useRoute();
 </script>
@@ -10,6 +11,9 @@ const route = useRoute();
          หน้าอื่น: อยู่ใน MainLayout แล้ว จะ animate ข้างในเอง -->
     <component :is="Component" :key="route.path" />
   </RouterView>
+
+  <!-- PWA: ชวนติดตั้ง + แจ้งเวอร์ชันใหม่ (ครอบทุกหน้า — admin + viewer) -->
+  <InstallPrompt />
 </template>
 
 <style>

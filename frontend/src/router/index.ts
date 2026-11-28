@@ -90,6 +90,18 @@ const router = createRouter({
           component: () => import('@/views/auth/ChangePassword.vue'),
           meta: { requiresAuth: true },
         },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('@/views/admin/UserManagement.vue'),
+          meta: { requiresAuth: true, requiresPermission: 'MANAGE_USERS' },
+        },
+        {
+          path: 'audit',
+          name: 'admin-audit',
+          component: () => import('@/views/admin/AuditLogView.vue'),
+          meta: { requiresAuth: true, requiresPermission: 'VIEW_AUDIT_LOG' },
+        },
       ],
     },
     {

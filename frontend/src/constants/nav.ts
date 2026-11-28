@@ -25,6 +25,26 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   // หน้างาน (stands / palettes / stunts) ผูกกับ event ⇒ อยู่ในแท็บของ EventWorkspace
   // ไม่ใช่เมนูถาวร · กลุ่ม "ควบคุม" (live / rosters) จะมา Phase 5
+  {
+    key: 'system',
+    label: 'ระบบ',
+    items: [
+      {
+        key: 'users',
+        label: 'จัดการผู้ใช้',
+        icon: 'bi-people',
+        to: { name: 'admin-users' },
+        permission: 'MANAGE_USERS',
+      },
+      {
+        key: 'audit',
+        label: 'บันทึกการใช้งาน',
+        icon: 'bi-clock-history',
+        to: { name: 'admin-audit' },
+        permission: 'VIEW_AUDIT_LOG',
+      },
+    ],
+  },
 ]
 
 /** ชื่อหน้าสำหรับหัวแถบ — route ใหม่ต้องเพิ่มชื่อที่นี่ */
@@ -39,4 +59,6 @@ export const routeTitles: Record<string, string> = {
   'event-exports': 'รายชื่อ & Export',
   'stunt-studio': 'Pixel Studio',
   'stunt-convert': 'แปลงรูปเป็นพิกเซล',
+  'admin-users': 'จัดการผู้ใช้',
+  'admin-audit': 'บันทึกการใช้งาน',
 }

@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
+import QrCode from '@/components/QrCode.vue'
 import { useEventContext } from '@/composables/eventContext'
 import { EVENT_STATUS } from '@/constants/status'
 import { errorMessage, formatDateTime, formatNumber, toDateInputValue } from '@/lib/format'
@@ -28,6 +29,27 @@ const palettes = ref<PaletteOut[]>([])
 const stunts = ref<StuntOut[]>([])
 
 const canManageEvent = computed(() => authStore.hasPermission('MANAGE_EVENTS'))
+
+// ── ลิงก์ผู้ชม + QR ────────────────────────────────────────────────
+const viewerUrl = computed(() => {
+  const ev = event?.value
+  return ev ? `${window.location.origin}/e/${ev.slug}` : ''
+})
+const copied = ref(false)
+
+async function copyViewerUrl(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(viewerUrl.value)
+    copied.value = true
+    window.setTimeout(() => (copied.value = false), 2000)
+  } catch {
+    /* clipboard ต้องการ secure context — ปล่อยให้ copy เองจาก code block */
+  }
+}
+
+function openViewer(): void {
+  if (viewerUrl.value) window.open(viewerUrl.value, '_blank')
+}
 const canPublish = computed(() => authStore.hasPermission('PUBLISH_STUNTS'))
 const canStands = computed(() => authStore.hasPermission('MANAGE_STANDS'))
 const canPalettes = computed(() => authStore.hasPermission('MANAGE_PALETTES'))
@@ -261,8 +283,24 @@ function go(name: string) {
     <!-- ลิงก์ผู้ชม -->
     <AppCard v-if="event.public_access_enabled && event.published_version > 0" :padded="true">
       <h3 class="font-display text-title-m font-bold mb-1">ลิงก์แจกผู้ชม</h3>
-      <p class="text-caption text-ink-2 mb-2">นักเรียนเปิดลิงก์นี้บนมือถือเพื่อดูโพยของตัวเอง</p>
-      <code class="block truncate rounded-control bg-canvas px-3 py-2 text-sm">/e/{{ event.slug }}</code>
+      <p class="text-caption text-ink-2 mb-3">นักเรียนเปิดลิงก์นี้บนมือถือเพื่อดูโพยของตัวเอง</p>
+      <div class="flex flex-wrap items-center gap-4">
+        <QrCode :value="viewerUrl" :size="160" />
+        <div class="min-w-0 flex-1">
+          <code class="block truncate rounded-control bg-canvas px-3 py-2 text-sm">{{ viewerUrl }}</code>
+          <div class="mt-2 flex gap-2">
+            <AppButton size="sm" variant="secondary" @click="copyViewerUrl">
+              <template #icon><i class="bi bi-clipboard" aria-hidden="true" /></template>
+              คัดลอกลิงก์
+            </AppButton>
+            <AppButton size="sm" variant="text" @click="openViewer">
+              <template #icon><i class="bi bi-box-arrow-up-right" aria-hidden="true" /></template>
+              เปิด
+            </AppButton>
+          </div>
+          <p v-if="copied" class="mt-2 text-caption text-ok-strong">คัดลอกแล้ว</p>
+        </div>
+      </div>
     </AppCard>
 
     <!-- ตั้งค่างาน (admin) -->

@@ -71,6 +71,28 @@ export function createGridCanvas(
   return canvas
 }
 
+/** เรนเดอร์ grid เป็น PNG data URL ที่ `scale` พิกเซลต่อช่อง (ช่องว่าง = พื้นขาว) */
+export function exportGridPngDataUrl(
+  grid: Grid,
+  width: number,
+  height: number,
+  lookup: ColorLookup,
+  scale = 8,
+): string {
+  const src = createGridCanvas(grid, width, height, lookup)
+  const out = document.createElement('canvas')
+  out.width = width * scale
+  out.height = height * scale
+  const ctx = out.getContext('2d')
+  if (ctx) {
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect(0, 0, out.width, out.height)
+    ctx.imageSmoothingEnabled = false
+    ctx.drawImage(src, 0, 0, out.width, out.height)
+  }
+  return out.toDataURL('image/png')
+}
+
 export interface ViewTransform {
   /** จุดซ้ายบนของกริดบน canvas (CSS px) */
   originX: number
