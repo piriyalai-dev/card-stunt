@@ -1,8 +1,7 @@
-from typing import List, Optional
-
 from pydantic import BaseModel, Field, field_validator
 
 from models.password import validate_password_strength
+from models.user_schemas import UserOut
 
 
 class LoginRequest(BaseModel):
@@ -15,16 +14,6 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(..., description="รหัสผ่านใหม่")
 
     _validate_new_password = field_validator("new_password")(validate_password_strength)
-
-
-class UserOut(BaseModel):
-    id: int
-    username: str
-    display_name: Optional[str] = None
-    role: Optional[str] = None
-    is_admin: bool = False
-    permissions: List[str] = []
-    must_change_password: bool = False
 
 
 class LoginResponse(BaseModel):

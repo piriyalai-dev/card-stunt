@@ -1,5 +1,5 @@
 """
-🔄 Migration Runner สำหรับ PIRIvoice
+🔄 Migration Runner สำหรับ Pixel Stand
 
 ระบบนี้ไม่มี ORM — schema ถูกสร้างโดย init_db (CREATE TABLE IF NOT EXISTS)
 ซึ่งไม่ช่วยอัปเกรด DB ที่มีข้อมูลอยู่แล้ว ดังนั้นจึงมี migration files:

@@ -75,9 +75,6 @@ class Settings(BaseSettings):
     REVISION_RETENTION: int = 20
 
     # Stand / grid limits (design §11: MAX_TOTAL_CELLS)
-    MAX_STAND_ROWS: int = 1000
-    MAX_STAND_COLS: int = 1000
-    MAX_SUB_SIZE: int = 16
     MAX_TOTAL_CELLS: int = 200000
 
     # Roster import limits

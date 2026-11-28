@@ -1,5 +1,9 @@
 """Stunt grid validation + revisions + restore."""
+import os
+
 import pytest
+
+from core import media
 
 
 @pytest.mark.asyncio
@@ -107,3 +111,25 @@ async def test_revisions_snapshot_and_restore(client, admin, event_row, stand_ro
     rev1 = [r for r in revs if r["revision_no"] == 1][0]
     assert client.post(f"/api/v1/stunts/{sid}/revisions/{rev1['id']}/restore",
                        headers={"Authorization": f"Bearer {admin['token']}"}).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_delete_stunt_removes_media_files(client, admin, event_row, stand_row, palette_row):
+    """delete_stunt ต้องลบไฟล์ media (reference/thumb) ด้วย — กัน orphan บนดิสก์."""
+    s = client.post(f"/api/v1/events/{event_row['id']}/stunts",
+                    json={"code": "S1", "title": "ฉาก", "palette_a_id": palette_row["id"]},
+                    headers={"Authorization": f"Bearer {admin['token']}"})
+    sid = s.json()["id"]
+
+    # จำลอง stunt ที่เคยอัปโหลด reference image ไว้
+    ref = media._safe_path(sid, "reference.png")
+    os.makedirs(os.path.dirname(ref), exist_ok=True)
+    with open(ref, "wb") as f:
+        f.write(b"fake")
+    assert os.path.exists(ref)
+
+    r = client.delete(f"/api/v1/stunts/{sid}",
+                      headers={"Authorization": f"Bearer {admin['token']}"})
+    assert r.status_code == 200, r.text
+
+    assert not os.path.exists(os.path.dirname(ref))

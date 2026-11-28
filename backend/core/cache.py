@@ -3,8 +3,8 @@
 
 หลักการ:
 - Redis **ว่าง/ล่ม = cache miss** แล้วอ่านจาก DB ตรง ๆ — ห้าม 500 ห้าม block startup
-- generation-based invalidation: ทุก mutation ของ event subtree `INCR pixelstand:gen:event:{id}`
-  แล้ว key ของ cache ฝัง gen ไว้ ⇒ key เก่าหมดอายุเอง ไม่ต้อง SCAN/DEL
+- invalidation แบบ version-based: key ฝัง `event.version` (gen) ⇒ แก้/publish event บั๊ม version
+  แล้ว key เก่าหมดอายุเองตาม TTL ไม่ต้อง SCAN/DEL
 - loop-safe: TestClient สร้าง event loop ใหม่ต่อ test ⇒ client ที่ผูก loop เก่าต้องสร้างใหม่
 """
 import asyncio
@@ -66,20 +66,6 @@ async def set_json(key: str, value, ttl: int) -> None:
     await _safe_call(r.set(key, json.dumps(value, ensure_ascii=False, default=str), ex=ttl))
 
 
-async def incr(key: str) -> None:
-    r = _redis()
-    if r is None:
-        return
-    await _safe_call(r.incr(key))
-
-
-async def delete(key: str) -> None:
-    r = _redis()
-    if r is None:
-        return
-    await _safe_call(r.delete(key))
-
-
 async def flush_test_db() -> None:
     """ล้าง DB ของเทสต์ก่อนแต่ละ test (Redis db 15) — ไม่แตะ db production (1)."""
     r = _redis()
@@ -89,10 +75,6 @@ async def flush_test_db() -> None:
 
 
 # ── key helper ──────────────────────────────────────────────────────
-
-def event_gen_key(event_id: int) -> str:
-    return f"{_PREFIX}:gen:event:{event_id}"
-
 
 def cache_key(slug: str, gen: int, kind: str, *parts) -> str:
     seg = ":".join(parts)

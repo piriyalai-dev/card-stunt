@@ -55,6 +55,6 @@ export default defineConfig({
     },
   },
   server: {
-    // TODO: ใส่ domain ของโปรเจค PIRIvoice เมื่อ deploy (เพิ่มที่ allowedHosts)
+    // TODO: ใส่ domain ของ Pixel Stand เมื่อ deploy (เพิ่มที่ allowedHosts)
   }
 })

@@ -53,7 +53,7 @@ if docker node ls >/dev/null 2>&1; then green "   ✔ Swarm เปิดอย�
 else docker swarm init; green "   ✔ Swarm พร้อมใช้แล้ว"; fi
 
 step "2/5 สร้าง Docker Networks"
-for net in "$NET" "traefik-public" "db-management"; do
+for net in "$NET" "traefik-public"; do
     if docker network ls --format '{{.Name}}' | grep -qx "$net"; then
         green "   ✔ Network $net มีอยู่แล้ว"
     else

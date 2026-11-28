@@ -164,6 +164,9 @@ async def delete_stunt(pool: asyncpg.Pool, actor_id: int, stunt_id: int) -> None
                 user_id=actor_id, entity_type="stunt", entity_id=str(stunt_id),
             )
 
+    # ลบไฟล์ media (reference/thumb) หลัง commit — best-effort กัน orphan บนดิสก์
+    media.delete_stunt_files(stunt_id)
+
 
 async def reorder_stunts(pool: asyncpg.Pool, actor_id: int, event_id: int, order: list) -> None:
     async with pool.acquire() as conn:

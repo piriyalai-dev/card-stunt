@@ -43,6 +43,17 @@
 
 **Migration:** `005_token_version` — เพิ่ม `users.token_version INT NOT NULL DEFAULT 0`
 
+### Chore — Wave 5 (cleanup dead code) (2026-11-28)
+
+- ลบ dead code: `core/cache.py` (`incr`/`delete`/`event_gen_key` ที่ไม่มีใครเรียก) · `core/queues.py` (`EXPORT_QUEUE` ไม่ถูกใช้ — enqueue/worker ใช้ job name `generate_export` ตรง ๆ) · `core/rbac.py::require_any_permission` · config `MAX_STAND_ROWS`/`MAX_STAND_COLS`/`MAX_SUB_SIZE` (ใช้จริงแค่ `MAX_TOTAL_CELLS`)
+- รวม `UserOut` ที่ประกาศซ้ำ (`models/auth_schemas` + `models/user_schemas`) → ใช้ตัวเดียวจาก `user_schemas`
+- `ExportCreate.scope` เป็น `Literal["event", "stand"]` (เดิม free-text) + tighten type ฝั่ง frontend (`services/exports.ts`, `types/domain.ts`)
+- แก้ media orphan: `delete_stunt` ลบไฟล์ reference/thumb หลัง commit (เดิม `delete_stunt_files` ประกาศไว้แต่ไม่ถูกเรียก)
+- setup.sh: ไม่สร้าง network `db-management` (เหลือจาก template classroom — pixelstand ใช้แค่ `pixelstand-internal` + `traefik-public`)
+- ลบ dep `@vue/test-utils` (ไม่มี test ใช้) · แก้ stale comment/docstring ที่ระบุโปรเจกต์เป็น "PIRIvoice" (`core/migrations.py`, `vite.config.ts`)
+
+**Migration:** ไม่มี migration ใหม่
+
 ## [0.4.0] — 2026-11-28 — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
 
 ### Phase 5 — Student Viewer PWA (2026-11-27)

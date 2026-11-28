@@ -241,7 +241,7 @@ export interface ExportJob {
   event_id: number
   stand_id: number | null
   format: ExportFormat
-  scope: string
+  scope: 'event' | 'stand'
   status: ExportStatus
   file_path: string | null
   error: string | null

@@ -1,4 +1,4 @@
-// Auth types — ตรงกับ backend `models/auth_schemas.py::UserOut`
+// Auth types — ตรงกับ backend `models/user_schemas.py::UserOut`
 export interface AuthUser {
   id: number
   username: string

@@ -9,7 +9,7 @@ export async function listExports(eventId: number): Promise<ExportJob[]> {
 
 export async function createExport(
   eventId: number,
-  body: { format: ExportFormat; stand_id?: number | null; scope?: string },
+  body: { format: ExportFormat; stand_id?: number | null; scope?: 'event' | 'stand' },
 ): Promise<ExportJob> {
   return (await api.post(`${BASE}/events/${eventId}/exports`, body)) as unknown as ExportJob
 }

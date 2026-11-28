@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from core.config import settings
 from core.dependencies import get_db_pool, get_current_user
 from core.exceptions import ForbiddenError, NotFoundError, RateLimitError
-from models.auth_schemas import LoginRequest, LoginResponse, UserOut, ChangePasswordRequest
+from models.auth_schemas import LoginRequest, LoginResponse, ChangePasswordRequest
+from models.user_schemas import UserOut
 from services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["Auth"])

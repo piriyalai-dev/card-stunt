@@ -16,5 +16,5 @@ Pillow==13.0.0
 python-multipart>=0.0.9
 # roster import (xlsx)
 openpyxl==3.1.5
-# ARQ export worker (queue `pixelstand:queue:export`) — Phase 5
+# ARQ export worker (job `generate_export`) — Phase 5
 arq==0.26.3
