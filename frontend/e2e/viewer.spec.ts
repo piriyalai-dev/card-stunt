@@ -5,14 +5,14 @@ test.beforeEach(async ({ page }) => {
   await mockPublicApi(page)
 })
 
-test('ผู้ชม: เลือกที่นั่ง → โพย → โฟกัส → ฉากถัดไป', async ({ page }) => {
+test('ผู้ชม: ใส่รหัสล็อกอิน → โพย → โฟกัส → ฉากถัดไป', async ({ page }) => {
   await page.goto('/e/sport69')
 
   await expect(page.getByRole('heading', { name: 'กีฬาสี 69 — โซนกลาง' })).toBeVisible()
 
-  // แตะผัง (ป้าย aria-label มาจาก 1-based label)
-  await page.getByRole('button', { name: 'แถว A ที่นั่ง 1', exact: true }).click()
-  await page.getByRole('button', { name: /เข้าดูโพย/ }).click()
+  // ใส่รหัสล็อกอินที่พิมพ์แจก
+  await page.getByPlaceholder(/รหัสล็อกอิน/).fill('ABCD1234')
+  await page.getByRole('button', { name: 'เข้าดูโพย' }).click()
 
   await expect(page.getByRole('heading', { name: 'แถว A · ที่นั่ง 1' })).toBeVisible()
   await expect(page.getByText('นาย ตัวอย่าง')).toBeVisible()
@@ -30,22 +30,13 @@ test('ผู้ชม: เลือกที่นั่ง → โพย → �
   await expect(page.getByTestId('next-cue')).toContainText('01 (แดงสด)')
 })
 
-test('ผู้ชม: ค้นหาด้วยเลขประจำตัว', async ({ page }) => {
-  await page.goto('/e/sport69')
-  await page.getByPlaceholder('เลขประจำตัวนักเรียน').fill('10001')
-  await page.getByRole('button', { name: 'ค้นหา' }).click()
-
-  await expect(page.getByRole('heading', { name: 'แถว A · ที่นั่ง 1' })).toBeVisible()
-  await expect(page.getByText('นาย ตัวอย่าง')).toBeVisible()
-})
-
 test('ผู้ชม: ออฟไลน์แล้วยังเปิดโพยจาก cache ได้', async ({ page }) => {
   await page.goto('/e/sport69')
-  await page.getByRole('button', { name: 'แถว A ที่นั่ง 1', exact: true }).click()
-  await page.getByRole('button', { name: /เข้าดูโพย/ }).click()
+  await page.getByPlaceholder(/รหัสล็อกอิน/).fill('ABCD1234')
+  await page.getByRole('button', { name: 'เข้าดูโพย' }).click()
   await expect(page.getByRole('heading', { name: 'แถว A · ที่นั่ง 1' })).toBeVisible()
 
-  // ตัดเน็ตเฉพาะ API แล้ว reload — meta/seat/selection ต้องมาจาก localStorage
+  // ตัดเน็ตเฉพาะ API แล้ว reload — meta/claim ต้องมาจาก localStorage
   await page.unroute('**/api/v1/public/events/**')
   await page.route('**/api/v1/public/events/**', (route) => route.abort())
   await page.reload()

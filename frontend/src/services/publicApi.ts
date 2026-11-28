@@ -39,6 +39,17 @@ export function absoluteApiUrl(path: string | null | undefined): string | null {
   return `${apiBase()}${path.startsWith('/') ? '' : '/'}${path}`
 }
 
+async function parseError(response: Response): Promise<PublicApiError> {
+  let detail = 'โหลดข้อมูลไม่สำเร็จ'
+  try {
+    const body = (await response.json()) as { detail?: unknown }
+    if (typeof body.detail === 'string') detail = body.detail
+  } catch {
+    /* body ไม่ใช่ JSON */
+  }
+  return new PublicApiError(detail, response.status)
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   let response: Response
   try {
@@ -54,16 +65,28 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
     )
   }
 
-  if (!response.ok) {
-    let detail = 'โหลดข้อมูลไม่สำเร็จ'
-    try {
-      const body = (await response.json()) as { detail?: unknown }
-      if (typeof body.detail === 'string') detail = body.detail
-    } catch {
-      /* body ไม่ใช่ JSON */
-    }
-    throw new PublicApiError(detail, response.status)
+  if (!response.ok) throw await parseError(response)
+  return (await response.json()) as T
+}
+
+async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(`${apiBase()}${path}`, {
+      method: 'POST',
+      signal,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch (error) {
+    throw new PublicApiError(
+      error instanceof Error && error.name === 'AbortError'
+        ? 'ยกเลิกคำขอ'
+        : 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้',
+    )
   }
+
+  if (!response.ok) throw await parseError(response)
   return (await response.json()) as T
 }
 
@@ -73,24 +96,13 @@ export function fetchMeta(slug: string, signal?: AbortSignal): Promise<PublicMet
   return getJson(`/api/v1/public/events/${encodeURIComponent(slug)}/meta`, signal)
 }
 
-export function fetchSeatByPosition(
-  slug: string,
-  standId: number,
-  row: number,
-  col: number,
-  signal?: AbortSignal,
-): Promise<PublicSeat> {
-  const params = new URLSearchParams({ row: String(row), col: String(col), stand_id: String(standId) })
-  return getJson(`/api/v1/public/events/${encodeURIComponent(slug)}/seat?${params}`, signal)
-}
-
-export function fetchSeatByCode(
-  slug: string,
-  studentCode: string,
-  signal?: AbortSignal,
-): Promise<PublicSeat> {
-  const params = new URLSearchParams({ student_code: studentCode })
-  return getJson(`/api/v1/public/events/${encodeURIComponent(slug)}/seat?${params}`, signal)
+/** ล็อกอินด้วยรหัสสุ่มที่พิมพ์แจกนักเรียน — คืนโพยของที่นั่งนั้น */
+export function claimSeat(slug: string, accessCode: string, signal?: AbortSignal): Promise<PublicSeat> {
+  return postJson(
+    `/api/v1/public/events/${encodeURIComponent(slug)}/claim`,
+    { access_code: accessCode },
+    signal,
+  )
 }
 
 export function fetchVersion(slug: string, signal?: AbortSignal): Promise<PublicVersion> {
@@ -109,15 +121,8 @@ export function cacheMetaPayload(slug: string, data: PublicMeta): Cached<PublicM
   return writeCache(cacheKeys.meta(slug), data)
 }
 
-export function cacheSeatPayload(slug: string, seat: PublicSeat): Cached<PublicSeat> {
-  const entry = writeCache(
-    cacheKeys.seat(slug, seat.stand_id, seat.row_index, seat.col_index),
-    seat,
-  )
-  if (seat.student?.student_code) {
-    writeCache(cacheKeys.seatCode(slug, seat.student.student_code), seat)
-  }
-  return entry
+export function cacheClaimPayload(slug: string, code: string, seat: PublicSeat): Cached<PublicSeat> {
+  return writeCache(cacheKeys.access(slug, code), seat)
 }
 
 export async function loadMeta(slug: string, signal?: AbortSignal): Promise<LoadResult<PublicMeta>> {
@@ -133,36 +138,15 @@ export async function loadMeta(slug: string, signal?: AbortSignal): Promise<Load
   }
 }
 
-export async function loadSeatByPosition(
+export async function loadClaim(
   slug: string,
-  standId: number,
-  row: number,
-  col: number,
+  accessCode: string,
   signal?: AbortSignal,
 ): Promise<LoadResult<PublicSeat>> {
-  // ⚠️ `cacheSeatPayload` เก็บด้วย index **0-based** (จาก response) แต่ผู้เรียกส่ง label 1-based
-  //    (API public รับ 1-based) ⇒ key ต้องลบ 1 ไม่งั้น offline restore จะ miss เสมอ
-  const key = cacheKeys.seat(slug, standId, row - 1, col - 1)
+  const key = cacheKeys.access(slug, accessCode)
   try {
-    const data = await fetchSeatByPosition(slug, standId, row, col, signal)
-    const entry = cacheSeatPayload(slug, data)
-    return { data, offline: false, saved_at: entry.saved_at }
-  } catch (error) {
-    const cached = readCache<PublicSeat>(key)
-    if (cached) return { data: cached.data, offline: true, saved_at: cached.saved_at }
-    throw error
-  }
-}
-
-export async function loadSeatByCode(
-  slug: string,
-  studentCode: string,
-  signal?: AbortSignal,
-): Promise<LoadResult<PublicSeat>> {
-  const key = cacheKeys.seatCode(slug, studentCode)
-  try {
-    const data = await fetchSeatByCode(slug, studentCode, signal)
-    const entry = cacheSeatPayload(slug, data)
+    const data = await claimSeat(slug, accessCode, signal)
+    const entry = cacheClaimPayload(slug, accessCode, data)
     return { data, offline: false, saved_at: entry.saved_at }
   } catch (error) {
     const cached = readCache<PublicSeat>(key)

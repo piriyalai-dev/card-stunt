@@ -98,7 +98,8 @@ const settings = reactive({
   event_date: '',
   status: 'draft' as EventStatus,
   public_access_enabled: false,
-  roster_lookup_enabled: false,
+  palette_a_id: null as number | null,
+  palette_b_id: null as number | null,
 })
 const saving = ref(false)
 const settingsError = ref('')
@@ -110,7 +111,8 @@ function syncSettings() {
   settings.event_date = toDateInputValue(event.value.event_date)
   settings.status = event.value.status
   settings.public_access_enabled = event.value.public_access_enabled
-  settings.roster_lookup_enabled = event.value.roster_lookup_enabled
+  settings.palette_a_id = event.value.palette_a_id
+  settings.palette_b_id = event.value.palette_b_id
 }
 
 onMounted(syncSettings)
@@ -126,7 +128,8 @@ async function saveSettings() {
       event_date: settings.event_date || undefined,
       status: settings.status,
       public_access_enabled: settings.public_access_enabled,
-      roster_lookup_enabled: settings.roster_lookup_enabled,
+      palette_a_id: settings.palette_a_id,
+      palette_b_id: settings.palette_b_id,
     })
     await ctx?.reload()
     syncSettings()
@@ -329,10 +332,24 @@ function go(name: string) {
           <input v-model="settings.public_access_enabled" type="checkbox" class="h-4 w-4" />
           เปิดให้ผู้ชมเข้าดู
         </label>
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="settings.roster_lookup_enabled" type="checkbox" class="h-4 w-4" />
-          เปิดค้นหาด้วยเลขประจำตัว
-        </label>
+        <div>
+          <label class="block text-caption font-semibold text-ink-2 mb-1" for="set-palette-a">ชุดสี ด้าน A</label>
+          <select id="set-palette-a" v-model.number="settings.palette_a_id" class="field">
+            <option :value="null">— ไม่ระบุ —</option>
+            <option v-for="palette in palettes" :key="palette.id" :value="palette.id">
+              {{ palette.name }} ({{ palette.colors.length }} สี)
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-caption font-semibold text-ink-2 mb-1" for="set-palette-b">ชุดสี ด้าน B</label>
+          <select id="set-palette-b" v-model.number="settings.palette_b_id" class="field">
+            <option :value="null">— ไม่ระบุ —</option>
+            <option v-for="palette in palettes" :key="palette.id" :value="palette.id">
+              {{ palette.name }} ({{ palette.colors.length }} สี)
+            </option>
+          </select>
+        </div>
         <p v-if="settingsError" class="sm:col-span-2 text-caption text-danger">{{ settingsError }}</p>
         <div class="sm:col-span-2">
           <AppButton type="submit" :loading="saving">บันทึก</AppButton>

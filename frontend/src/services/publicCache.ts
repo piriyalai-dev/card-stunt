@@ -3,7 +3,7 @@
  *
  * ⛔ **ห้ามย้ายไป service worker** — SW cache เป็น per-origin ไม่ใช่ per-user และกฎของ
  *    โปรเจกต์ห้าม cache `/api` ใน `sw.js` เด็ดขาด (ดู `public/sw.js`)
- * ✅ ข้อมูล public ไม่มีข้อมูลส่วนตัวนอกจากชื่อ/เลขนักศึกษา *ของที่นั่งที่ผู้ใช้เลือกเอง*
+ * ✅ ข้อมูล public ไม่มีข้อมูลส่วนตัวนอกจากชื่อ/เลขนักศึกษา *ของที่นั่งที่ผู้ใช้ใส่รหัสล็อกอิน*
  *    ⇒ เก็บใน localStorage ของเครื่องนั้นเป็นเรื่องที่ผู้ใช้คาดหมาย (เปิดออฟไลน์กลางสนาม)
  */
 
@@ -42,11 +42,9 @@ function safeRemove(key: string): void {
 
 export const cacheKeys = {
   meta: (slug: string) => `${PREFIX}:event:${slug}:meta`,
-  seat: (slug: string, standId: number, row: number, col: number) =>
-    `${PREFIX}:event:${slug}:seat:${standId}:${row}:${col}`,
-  seatCode: (slug: string, code: string) =>
-    `${PREFIX}:event:${slug}:seat-code:${code.trim().toLowerCase()}`,
-  selection: (slug: string) => `${PREFIX}:event:${slug}:selection`,
+  access: (slug: string, code: string) =>
+    `${PREFIX}:event:${slug}:access:${code.trim().toUpperCase()}`,
+  lastAccess: (slug: string) => `${PREFIX}:event:${slug}:last-access`,
   lastSlug: () => `${PREFIX}:last-slug`,
   followLive: () => `${PREFIX}:follow-live`,
 }
@@ -79,4 +77,12 @@ export function setLastSlug(slug: string): void {
 
 export function getLastSlug(): string | null {
   return safeGet(cacheKeys.lastSlug())
+}
+
+export function setLastAccess(slug: string, code: string): void {
+  safeSet(cacheKeys.lastAccess(slug), code.trim().toUpperCase())
+}
+
+export function getLastAccess(slug: string): string | null {
+  return safeGet(cacheKeys.lastAccess(slug))
 }

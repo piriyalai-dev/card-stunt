@@ -313,6 +313,7 @@ onUnmounted(stopPolling)
             <tr class="border-b border-line">
               <th class="py-2 pr-3 font-semibold">ที่นั่ง</th>
               <th class="py-2 pr-3 font-semibold">รหัส</th>
+              <th class="py-2 pr-3 font-semibold">รหัสล็อกอิน</th>
               <th class="py-2 pr-3 font-semibold">ชื่อ</th>
               <th class="py-2 pr-3 font-semibold">แสตน</th>
               <th class="py-2 font-semibold" />
@@ -322,6 +323,7 @@ onUnmounted(stopPolling)
             <tr v-for="r in filteredRosters" :key="r.id" class="border-b border-line/70">
               <td class="py-1.5 pr-3 font-semibold">{{ r.row_label }} · {{ r.seat_label }}</td>
               <td class="py-1.5 pr-3 font-mono text-[12px]">{{ r.student_code || '—' }}</td>
+              <td class="py-1.5 pr-3 font-mono text-[12px] font-semibold text-brand">{{ r.access_code || '—' }}</td>
               <td class="py-1.5 pr-3">{{ r.student_name }}</td>
               <td class="py-1.5 pr-3 text-ink-2">{{ standName(r.stand_id) }}</td>
               <td class="py-1.5 text-right">

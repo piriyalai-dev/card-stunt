@@ -5,43 +5,22 @@ const now = '2026-11-27T10:00:00Z'
 
 const plate = (colorId: number) => Array.from({ length: 5 }, () => Array.from({ length: 5 }, () => colorId))
 
-export const standPublic = {
-  id: 11,
-  name: 'โซนกลาง',
-  rows: 2,
-  cols: 3,
-  sub_rows: 5,
-  sub_cols: 5,
-  row_direction: 'bottom_to_top',
-  col_direction: 'left_to_right',
-  row_label_style: 'alpha',
-  col_label_style: 'numeric',
-  row_label_prefix: '',
-  col_label_prefix: '',
-  blocked_seats: [{ row: 0, col: 2 }],
-}
+export const palettes = [
+  {
+    id: 5,
+    name: 'ชุดหลัก',
+    colors: [
+      { id: 1, code: '01', name_th: 'แดงสด', hex: '#B91C1C', text_color: '#FFFFFF' },
+      { id: 2, code: '02', name_th: 'ขาว', hex: '#FFFFFF', text_color: '#1F2328' },
+    ],
+  },
+]
 
 export const meta = {
   slug: 'sport69',
   name: 'กีฬาสี 69 — โซนกลาง',
   published_version: 3,
-  roster_lookup_enabled: true,
   event_date: '2026-11-27',
-  stands: [standPublic],
-  palettes: [
-    {
-      id: 5,
-      name: 'ชุดหลัก',
-      colors: [
-        { id: 1, code: '01', name_th: 'แดงสด', hex: '#B91C1C', text_color: '#FFFFFF' },
-        { id: 2, code: '02', name_th: 'ขาว', hex: '#FFFFFF', text_color: '#1F2328' },
-      ],
-    },
-  ],
-  stunts: [
-    { id: 101, code: '01', title: 'เปิดตัว', order_index: 1, status: 'published' },
-    { id: 102, code: '02', title: 'โลโก้โรงเรียน', order_index: 2, status: 'published' },
-  ],
   live: { stunt_id: 101, stunt_index: 0, total: 2, is_active: false, published_version: 3 },
 }
 
@@ -53,9 +32,10 @@ export const seat = {
   row_label: 'A',
   seat_label: '1',
   student: { student_code: '10001', student_name: 'นาย ตัวอย่าง' },
+  palettes,
   stunts: [
-    { id: 101, code: '01', title: 'เปิดตัว', notes: 'ยกค้าง 8 จังหวะ', side_a: plate(1), side_b: null },
-    { id: 102, code: '02', title: 'โลโก้โรงเรียน', notes: null, side_a: plate(2), side_b: null },
+    { id: 101, code: '01', title: 'เปิดตัว', notes: 'ยกค้าง 8 จังหวะ', side: 'A', plate: plate(1) },
+    { id: 102, code: '02', title: 'โลโก้โรงเรียน', notes: null, side: 'B', plate: plate(2) },
   ],
 }
 
@@ -82,7 +62,8 @@ export const eventAdmin = {
   version: 4,
   published_version: 3,
   public_access_enabled: true,
-  roster_lookup_enabled: true,
+  palette_a_id: 5,
+  palette_b_id: 5,
   live_stunt_id: 101,
   live_is_active: false,
   created_at: now,
@@ -120,6 +101,7 @@ export const roster = {
   row_label: 'A',
   seat_label: '1',
   student_code: '10001',
+  access_code: 'ABCD1234',
   student_name: 'นาย ตัวอย่าง',
   note: null,
   created_at: now,
@@ -142,19 +124,24 @@ export const exportJob = (id: number, status: string) => ({
 
 export const stuntsAdmin = [
   {
-    id: 101, event_id: 1, stand_id: 11, palette_a_id: 5, palette_b_id: null,
+    id: 101, event_id: 1, stand_id: 11, side: 'A',
     code: '01', title: 'เปิดตัว', section: null, notes: null, order_index: 1,
     status: 'published', grid_width: 15, grid_height: 10,
     reference_image_path: null, reference_transform: null, thumbnail_path: null,
     created_at: now, updated_at: now,
   },
   {
-    id: 102, event_id: 1, stand_id: 11, palette_a_id: 5, palette_b_id: null,
+    id: 102, event_id: 1, stand_id: 11, side: 'B',
     code: '02', title: 'โลโก้โรงเรียน', section: null, notes: null, order_index: 2,
     status: 'published', grid_width: 15, grid_height: 10,
     reference_image_path: null, reference_transform: null, thumbnail_path: null,
     created_at: now, updated_at: now,
   },
+]
+
+export const queue = [
+  { stunt_id: 101, position: 0, code: '01', title: 'เปิดตัว', side: 'A', status: 'published' },
+  { stunt_id: 102, position: 1, code: '02', title: 'โลโก้โรงเรียน', side: 'B', status: 'published' },
 ]
 
 export const liveState = (currentId: number | null) => ({
@@ -176,7 +163,7 @@ async function fulfillJson(route: Route, data: unknown, status = 200): Promise<v
   await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) })
 }
 
-/** viewer: meta / seat / version — `/live` ถูก abort (ไม่ต้องเปิด SSE จริง) */
+/** viewer: meta / claim / version — `/live` ถูก abort (ไม่ต้องเปิด SSE จริง) */
 export async function mockPublicApi(page: Page): Promise<void> {
   await page.route('**/api/v1/public/events/**', async (route) => {
     const url = new URL(route.request().url())
@@ -184,7 +171,7 @@ export async function mockPublicApi(page: Page): Promise<void> {
     if (url.pathname.endsWith('/version')) {
       return fulfillJson(route, { published_version: 3, updated_at: now })
     }
-    if (url.pathname.endsWith('/seat')) return fulfillJson(route, seat)
+    if (url.pathname.endsWith('/claim')) return fulfillJson(route, seat)
     if (url.pathname.endsWith('/live')) return route.abort()
     return fulfillJson(route, { detail: 'not mocked' }, 404)
   })
@@ -211,6 +198,11 @@ export async function mockAdminApi(page: Page): Promise<AdminMock> {
     'POST /api/v1/events/1/exports': (route) => fulfillJson(route, exportJob(2, 'queued')),
     'GET /api/v1/events/1/live': (route) => fulfillJson(route, liveState(liveCurrent)),
     'GET /api/v1/events/1/stunts': (route) => fulfillJson(route, stuntsAdmin),
+    'GET /api/v1/events/1/queue': (route) => fulfillJson(route, queue),
+    'PUT /api/v1/events/1/queue': (route) => fulfillJson(route, queue),
+    'POST /api/v1/events/1/queue/insert': (route) => fulfillJson(route, queue),
+    'DELETE /api/v1/events/1/queue/101': (route) => fulfillJson(route, [queue[1]]),
+    'DELETE /api/v1/events/1/queue/102': (route) => fulfillJson(route, [queue[0]]),
     'POST /api/v1/events/1/live/advance': async (route) => {
       const body = route.request().postDataJSON() as { action: string; stunt_id?: number }
       if (body.action === 'next') liveCurrent = 102
@@ -226,7 +218,6 @@ export async function mockAdminApi(page: Page): Promise<AdminMock> {
     const key = `${request.method()} ${url.pathname}`
 
     if (key === 'GET /api/v1/exports/2') {
-      // poll แรก ๆ ยัง queued (ถ้าเทสต์ยังไม่สั่งเปลี่ยน) — เปลี่ยนได้ผ่าน AdminMock
       return fulfillJson(route, exportJob(2, newJobStatus))
     }
     if (key === 'GET /api/v1/exports/2/download') {

@@ -8,11 +8,10 @@ import { useEventContext } from '@/composables/eventContext'
 import { STUNT_STATUS } from '@/constants/status'
 import { errorMessage, formatDateTime } from '@/lib/format'
 import * as eventsService from '@/services/events'
-import * as palettesService from '@/services/palettes'
 import * as standsService from '@/services/stands'
 import * as stuntsService from '@/services/stunts'
 import { useAuthStore } from '@/stores/auth'
-import type { PaletteOut, StandOut, StuntCreate, StuntOut, StuntStatus } from '@/types/domain'
+import type { Side, StandOut, StuntCreate, StuntOut, StuntStatus } from '@/types/domain'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -23,13 +22,13 @@ const canPublish = computed(() => authStore.hasPermission('PUBLISH_STUNTS'))
 
 const stunts = ref<StuntOut[]>([])
 const stands = ref<StandOut[]>([])
-const palettes = ref<PaletteOut[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
 const message = ref('')
 
 const flatMode = ref(false)
+const sideFilter = ref<'ALL' | Side>('ALL')
 
 async function load() {
   if (!event?.value) return
@@ -37,14 +36,12 @@ async function load() {
   error.value = ''
   const id = event.value.id
   try {
-    const [st, sd, pl] = await Promise.all([
+    const [st, sd] = await Promise.all([
       stuntsService.listStunts(id),
       standsService.listStands(id),
-      palettesService.listPalettes(id),
     ])
     stunts.value = [...st].sort((a, b) => a.order_index - b.order_index || a.id - b.id)
     stands.value = sd
-    palettes.value = pl
   } catch (e) {
     error.value = errorMessage(e)
   } finally {
@@ -58,14 +55,13 @@ function standName(id: number): string {
   return stands.value.find((s) => s.id === id)?.name ?? `#${id}`
 }
 
-function paletteName(id: number | null): string {
-  if (!id) return '—'
-  return palettes.value.find((p) => p.id === id)?.name ?? `#${id}`
-}
+const visibleStunts = computed(() =>
+  sideFilter.value === 'ALL' ? stunts.value : stunts.value.filter((s) => s.side === sideFilter.value),
+)
 
 const groups = computed(() => {
   const map = new Map<string, StuntOut[]>()
-  for (const stunt of stunts.value) {
+  for (const stunt of visibleStunts.value) {
     const key = stunt.section?.trim() || 'ไม่มีกลุ่ม'
     const list = map.get(key) ?? []
     list.push(stunt)
@@ -83,8 +79,7 @@ interface Draft {
   notes: string
   status: StuntStatus
   stand_id: number | null
-  palette_a_id: number | null
-  palette_b_id: number | null
+  side: Side
 }
 
 const editorOpen = ref(false)
@@ -96,8 +91,7 @@ const draft = reactive<Draft>({
   notes: '',
   status: 'draft',
   stand_id: null,
-  palette_a_id: null,
-  palette_b_id: null,
+  side: 'A',
 })
 const formError = ref('')
 
@@ -114,8 +108,7 @@ function openCreate() {
     notes: '',
     status: 'draft',
     stand_id: stands.value[0]!.id,
-    palette_a_id: palettes.value.find((p) => p.is_default)?.id ?? palettes.value[0]?.id ?? null,
-    palette_b_id: null,
+    side: 'A' as Side,
   })
   formError.value = ''
   editorOpen.value = true
@@ -130,8 +123,7 @@ function openEdit(stunt: StuntOut) {
     notes: stunt.notes ?? '',
     status: stunt.status,
     stand_id: stunt.stand_id,
-    palette_a_id: stunt.palette_a_id,
-    palette_b_id: stunt.palette_b_id,
+    side: stunt.side,
   })
   formError.value = ''
   editorOpen.value = true
@@ -154,8 +146,7 @@ async function saveDraft() {
         notes: draft.notes.trim() || null,
         order_index: stunts.value.length,
         stand_id: draft.stand_id,
-        palette_a_id: draft.palette_a_id,
-        palette_b_id: draft.palette_b_id,
+        side: draft.side,
       }
       await stuntsService.createStunt(event.value.id, body)
       message.value = 'สร้างฉากแล้ว'
@@ -166,8 +157,7 @@ async function saveDraft() {
         section: draft.section.trim(),
         notes: draft.notes.trim(),
         status: draft.status,
-        palette_a_id: draft.palette_a_id,
-        palette_b_id: draft.palette_b_id,
+        side: draft.side,
       })
       message.value = 'บันทึกฉากแล้ว'
     }
@@ -197,23 +187,16 @@ async function duplicateStunt(stunt: StuntOut) {
       // order_index เดียวกับต้นฉบับ + id ใหม่ที่มากกว่า ⇒ อยู่ถัดจากต้นฉบับทันที
       order_index: stunt.order_index,
       stand_id: stunt.stand_id,
-      palette_a_id: stunt.palette_a_id,
-      palette_b_id: stunt.palette_b_id,
+      side: stunt.side,
     })
     createdId = created.id
     const size = stunt.grid_width * stunt.grid_height
-    if (stunt.palette_a_id) {
-      const grid = await stuntsService.getGrid(stunt.id)
-      const body: {
-        grid_data_a?: Array<number | null>
-        grid_data_b?: Array<number | null>
-        note: string
-      } = { note: `สำเนาจากฉาก ${stunt.code}` }
-      if (grid.grid_data_a.length === size) body.grid_data_a = grid.grid_data_a
-      if (stunt.palette_b_id && grid.grid_data_b.length === size) body.grid_data_b = grid.grid_data_b
-      if (body.grid_data_a || body.grid_data_b) {
-        await stuntsService.saveGrid(created.id, body)
-      }
+    const grid = await stuntsService.getGrid(stunt.id)
+    if (grid.grid_data.length === size) {
+      await stuntsService.saveGrid(created.id, {
+        grid_data: grid.grid_data,
+        note: `สำเนาจากฉาก ${stunt.code}`,
+      })
     }
     await load()
     message.value = `ทำสำเนาฉาก ${stunt.code} แล้ว`
@@ -324,6 +307,11 @@ function openConvert(stunt: StuntOut) {
   router.push({ name: 'stunt-convert', params: { stuntId: stunt.id } })
 }
 
+function openUpload() {
+  if (!event?.value) return
+  router.push({ name: 'stunt-upload', params: { eventId: event.value.id } })
+}
+
 const statusOptions = (Object.keys(STUNT_STATUS) as StuntStatus[]).map((key) => ({
   key,
   ...STUNT_STATUS[key],
@@ -344,10 +332,26 @@ const statusOptions = (Object.keys(STUNT_STATUS) as StuntStatus[]).map((key) => 
         <template #icon><i class="bi bi-plus-lg" aria-hidden="true" /></template>
         สร้างฉาก
       </AppButton>
+      <AppButton size="sm" variant="secondary" :disabled="stands.length === 0" @click="openUpload">
+        <template #icon><i class="bi bi-image" aria-hidden="true" /></template>
+        อัปโหลดรูป
+      </AppButton>
       <AppButton variant="secondary" size="sm" @click="flatMode = !flatMode">
         <template #icon><i class="bi bi-arrows-move" aria-hidden="true" /></template>
         {{ flatMode ? 'มุมมองกลุ่ม' : 'โหมดเรียงลำดับ' }}
       </AppButton>
+      <div class="inline-flex rounded-control border border-line p-0.5">
+        <button
+          v-for="opt in (['ALL', 'A', 'B'] as const)"
+          :key="opt"
+          type="button"
+          class="h-8 rounded-[10px] px-3 text-[13px] font-semibold"
+          :class="sideFilter === opt ? 'bg-brand text-white' : 'text-ink-2'"
+          @click="sideFilter = opt"
+        >
+          {{ opt === 'ALL' ? 'ทั้งหมด' : `ด้าน ${opt}` }}
+        </button>
+      </div>
       <AppButton
         v-if="canPublish"
         size="sm"
@@ -409,21 +413,10 @@ const statusOptions = (Object.keys(STUNT_STATUS) as StuntStatus[]).map((key) => 
           </select>
         </div>
         <div>
-          <label class="block text-caption font-semibold text-ink-2 mb-1">ชุดสี A</label>
-          <select v-model.number="draft.palette_a_id" class="field">
-            <option :value="null">— ไม่ระบุ —</option>
-            <option v-for="palette in palettes" :key="palette.id" :value="palette.id">
-              {{ palette.name }} ({{ palette.colors.length }} สี)
-            </option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-caption font-semibold text-ink-2 mb-1">ชุดสี B (ไม่บังคับ)</label>
-          <select v-model.number="draft.palette_b_id" class="field">
-            <option :value="null">— ไม่ระบุ —</option>
-            <option v-for="palette in palettes" :key="palette.id" :value="palette.id">
-              {{ palette.name }}
-            </option>
+          <label class="block text-caption font-semibold text-ink-2 mb-1">ด้าน</label>
+          <select v-model="draft.side" class="field">
+            <option value="A">ด้าน A</option>
+            <option value="B">ด้าน B</option>
           </select>
         </div>
         <div v-if="draft.id !== null">
@@ -432,9 +425,6 @@ const statusOptions = (Object.keys(STUNT_STATUS) as StuntStatus[]).map((key) => 
             <option v-for="opt in statusOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
           </select>
         </div>
-        <p v-if="draft.id !== null" class="sm:col-span-2 text-[11px] text-ink-3">
-          หมายเหตุ: ยังไม่รองรับการ "ถอด" ชุดสีออกจากฉาก — เลือกชุดอื่นแทนได้
-        </p>
         <div class="sm:col-span-2">
           <label class="block text-caption font-semibold text-ink-2 mb-1">หมายเหตุ</label>
           <textarea v-model="draft.notes" class="field" rows="2" placeholder="คำใบ้ให้เด็ก เช่น ยกค้าง 8 จังหวะ" />
@@ -505,13 +495,18 @@ const statusOptions = (Object.keys(STUNT_STATUS) as StuntStatus[]).map((key) => 
             </div>
 
             <p class="mt-2 text-caption text-ink-2">
-              ชุดสี A: {{ paletteName(stunt.palette_a_id) }}<template v-if="stunt.palette_b_id"> · B: {{ paletteName(stunt.palette_b_id) }}</template>
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
+                :class="stunt.side === 'A' ? 'bg-brand-tint text-brand' : 'bg-canvas text-ink-2'"
+              >
+                ด้าน {{ stunt.side }}
+              </span>
             </p>
             <p v-if="stunt.notes" class="mt-1 line-clamp-2 text-caption text-ink-3">{{ stunt.notes }}</p>
             <p class="mt-1 text-[11px] text-ink-3">แก้ล่าสุด {{ formatDateTime(stunt.updated_at) }}</p>
 
             <div class="mt-3 flex flex-wrap gap-1.5">
-              <AppButton size="sm" :disabled="!stunt.palette_a_id" @click="openStudio(stunt)">เปิด Studio</AppButton>
+              <AppButton size="sm" @click="openStudio(stunt)">เปิด Studio</AppButton>
               <AppButton size="sm" variant="secondary" @click="openConvert(stunt)">แปลงรูป</AppButton>
               <AppButton size="sm" variant="secondary" @click="openEdit(stunt)">แก้ไข</AppButton>
               <AppButton size="sm" variant="secondary" :loading="saving" @click="duplicateStunt(stunt)">
@@ -519,9 +514,6 @@ const statusOptions = (Object.keys(STUNT_STATUS) as StuntStatus[]).map((key) => 
               </AppButton>
               <AppButton size="sm" variant="danger" class="ml-auto" @click="removeStunt(stunt)">ลบ</AppButton>
             </div>
-            <p v-if="!stunt.palette_a_id" class="mt-1 text-[11px] text-warn">
-              ต้องกำหนดชุดสี A ก่อนจึงจะเปิด Studio ได้
-            </p>
           </AppCard>
         </div>
       </section>

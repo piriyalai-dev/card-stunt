@@ -2,7 +2,7 @@
 // (ไม่ใช้ `types/domain.ts` เพราะ endpoint public ส่งเฉพาะ subset ที่ปลอดภัย — ไม่มี id ภายในอื่น)
 
 export interface PublicColor {
-  /** id ของ palette_colors — `grid_data` ของเพลทเก็บค่านี้ ⇒ viewer ต้องใช้ resolve สี */
+  /** id ของ palette_colors — `plate` ของเพลทเก็บค่านี้ ⇒ viewer ต้องใช้ resolve สี */
   id: number
   code: string
   name_th: string
@@ -14,30 +14,6 @@ export interface PublicPalette {
   id: number
   name: string
   colors: PublicColor[]
-}
-
-export interface PublicStand {
-  id: number
-  name: string
-  rows: number
-  cols: number
-  sub_rows: number
-  sub_cols: number
-  row_direction: 'bottom_to_top' | 'top_to_bottom'
-  col_direction: 'left_to_right' | 'right_to_left'
-  row_label_style: 'numeric' | 'alpha'
-  col_label_style: 'numeric' | 'alpha'
-  row_label_prefix: string
-  col_label_prefix: string
-  blocked_seats: Array<{ row: number; col: number }>
-}
-
-export interface PublicStunt {
-  id: number
-  code: string
-  title: string
-  order_index: number
-  status: string
 }
 
 export interface PublicLive {
@@ -52,11 +28,7 @@ export interface PublicMeta {
   slug: string
   name: string
   published_version: number
-  roster_lookup_enabled: boolean
   event_date: string | null
-  stands: PublicStand[]
-  palettes: PublicPalette[]
-  stunts: PublicStunt[]
   live: PublicLive
 }
 
@@ -67,8 +39,8 @@ export interface PublicSeatStunt {
   code: string
   title: string
   notes: string | null
-  side_a: Plate
-  side_b: Plate
+  side: 'A' | 'B'
+  plate: Plate
 }
 
 export interface PublicSeat {
@@ -79,6 +51,7 @@ export interface PublicSeat {
   row_label: string
   seat_label: string
   student: { student_code: string | null; student_name: string } | null
+  palettes: PublicPalette[]
   stunts: PublicSeatStunt[]
 }
 

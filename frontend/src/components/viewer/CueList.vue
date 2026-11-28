@@ -2,9 +2,9 @@
 /**
  * 📋 My Cue List — ทุกฉากเรียงตามลำดับ พร้อมเพลท 5×5 ของที่นั่งเรา
  */
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import PlateGrid from './PlateGrid.vue'
-import { colorIndex, cueView, hasSideB } from '@/lib/seatView'
+import { colorIndex, cueView } from '@/lib/seatView'
 import type { PublicMeta, PublicSeat } from '@/types/public'
 
 const props = withDefaults(
@@ -23,13 +23,10 @@ const emit = defineEmits<{
   (e: 'change-seat'): void
 }>()
 
-const side = ref<'A' | 'B'>('A')
-const colors = computed(() => colorIndex(props.meta.palettes))
-const showSideSwitch = computed(() => hasSideB(props.seat.stunts))
+const colors = computed(() => colorIndex(props.seat.palettes))
 const cues = computed(() =>
-  props.seat.stunts.map((stunt, index) => cueView(stunt, side.value, colors.value, index)),
+  props.seat.stunts.map((stunt, index) => cueView(stunt, colors.value, index)),
 )
-const stand = computed(() => props.meta.stands.find((s) => s.id === props.seat.stand_id))
 
 function savedAtText(ts: number | null): string {
   if (!ts) return ''
@@ -51,7 +48,6 @@ function savedAtText(ts: number | null): string {
             <span v-if="seat.student?.student_name">{{ seat.student.student_name }}</span>
             <span v-else>ไม่ระบุชื่อ</span>
             <span v-if="seat.student?.student_code"> · {{ seat.student.student_code }}</span>
-            <span v-if="stand"> · {{ stand.name }}</span>
           </p>
         </div>
         <div class="shrink-0 text-right">
@@ -65,24 +61,12 @@ function savedAtText(ts: number | null): string {
       </div>
 
       <div class="mt-3 flex flex-wrap items-center gap-2">
-        <div v-if="showSideSwitch" class="inline-flex rounded-control border border-line p-0.5">
-          <button
-            v-for="s in (['A', 'B'] as const)"
-            :key="s"
-            type="button"
-            class="h-8 rounded-[10px] px-3 text-[13px] font-semibold"
-            :class="side === s ? 'bg-brand text-white' : 'text-ink-2'"
-            @click="side = s"
-          >
-            ด้าน {{ s }}
-          </button>
-        </div>
         <button
           type="button"
           class="h-9 rounded-control border border-line px-3 text-[13px] font-semibold text-ink-2 hover:text-brand"
           @click="emit('change-seat')"
         >
-          เปลี่ยนที่นั่ง
+          เปลี่ยนรหัส
         </button>
       </div>
     </header>
@@ -107,6 +91,12 @@ function savedAtText(ts: number | null): string {
             <span class="flex flex-wrap items-baseline gap-x-2">
               <span class="font-display text-title-m font-bold text-ink-1">{{ cue.stunt.code }}</span>
               <span class="text-body font-semibold text-ink-1">{{ cue.stunt.title }}</span>
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
+                :class="cue.stunt.side === 'A' ? 'bg-brand-tint text-brand' : 'bg-canvas text-ink-2'"
+              >
+                ด้าน {{ cue.stunt.side }}
+              </span>
             </span>
             <span v-if="cue.stunt.notes" class="mt-0.5 block text-caption text-ink-2">
               {{ cue.stunt.notes }}

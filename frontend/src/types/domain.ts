@@ -5,6 +5,7 @@
 
 export type EventStatus = 'draft' | 'active' | 'archived'
 export type StuntStatus = 'draft' | 'ready' | 'published'
+export type Side = 'A' | 'B'
 
 export interface EventOut {
   id: number
@@ -16,7 +17,8 @@ export interface EventOut {
   version: number
   published_version: number
   public_access_enabled: boolean
-  roster_lookup_enabled: boolean
+  palette_a_id: number | null
+  palette_b_id: number | null
   live_stunt_id: number | null
   live_is_active: boolean
   created_at: string
@@ -37,7 +39,8 @@ export interface EventUpdate {
   event_date?: string | null
   status?: EventStatus
   public_access_enabled?: boolean
-  roster_lookup_enabled?: boolean
+  palette_a_id?: number | null
+  palette_b_id?: number | null
 }
 
 export type RowDirection = 'bottom_to_top' | 'top_to_bottom'
@@ -151,8 +154,7 @@ export interface StuntOut {
   id: number
   event_id: number
   stand_id: number
-  palette_a_id: number | null
-  palette_b_id: number | null
+  side: Side
   code: string
   title: string
   section: string | null
@@ -175,8 +177,7 @@ export interface StuntCreate {
   notes?: string | null
   order_index?: number
   stand_id?: number | null
-  palette_a_id?: number | null
-  palette_b_id?: number | null
+  side?: Side
 }
 
 export interface StuntUpdate {
@@ -186,16 +187,14 @@ export interface StuntUpdate {
   notes?: string | null
   order_index?: number
   status?: StuntStatus
-  palette_a_id?: number | null
-  palette_b_id?: number | null
+  side?: Side
   reference_transform?: Record<string, unknown> | null
 }
 
 export interface StuntGrid {
   grid_width: number
   grid_height: number
-  grid_data_a: Array<number | null>
-  grid_data_b: Array<number | null>
+  grid_data: Array<number | null>
 }
 
 export interface RevisionOut {
@@ -210,10 +209,8 @@ export interface RevisionOut {
 
 export interface StuntStats {
   total_cells: number
-  filled_a: number
-  filled_b: number
-  color_counts_a: Record<string, number>
-  color_counts_b: Record<string, number>
+  filled: number
+  color_counts: Record<string, number>
 }
 
 // ── Roster / Export (Phase 5 — staff) ─────────────────────────────
@@ -227,6 +224,7 @@ export interface RosterOut {
   row_label: string | null
   seat_label: string | null
   student_code: string | null
+  access_code: string | null
   student_name: string
   note: string | null
   created_at: string
@@ -259,6 +257,15 @@ export interface LiveAdminState {
   published_version: number
   is_active: boolean
   stunt_ids: number[]
+}
+
+export interface LiveQueueItem {
+  stunt_id: number
+  position: number
+  code: string
+  title: string
+  side: Side
+  status: StuntStatus
 }
 
 // ── User management (admin — MANAGE_USERS) ────────────────────────

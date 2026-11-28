@@ -8,7 +8,7 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import PlateGrid from './PlateGrid.vue'
-import { colorIndex, cueView, hasSideB } from '@/lib/seatView'
+import { colorIndex, cueView } from '@/lib/seatView'
 import { useWakeLock } from '@/lib/wakeLock'
 import type { PublicMeta, PublicSeat } from '@/types/public'
 
@@ -22,9 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: 'close'): void }>()
 
-const colors = computed(() => colorIndex(props.meta.palettes))
-const side = ref<'A' | 'B'>('A')
-const showSideSwitch = computed(() => hasSideB(props.seat.stunts))
+const colors = computed(() => colorIndex(props.seat.palettes))
 const followLive = ref(props.liveActive)
 
 function clampIndex(value: number): number {
@@ -36,7 +34,7 @@ function clampIndex(value: number): number {
 const index = ref(clampIndex(props.startIndex))
 const current = computed(() => props.seat.stunts[index.value] ?? null)
 const cue = computed(() =>
-  current.value ? cueView(current.value, side.value, colors.value, index.value) : null,
+  current.value ? cueView(current.value, colors.value, index.value) : null,
 )
 const next = computed(() => {
   const total = props.seat.stunts.length
@@ -44,7 +42,7 @@ const next = computed(() => {
   return props.seat.stunts[(index.value + 1) % total]
 })
 const nextCue = computed(() =>
-  next.value ? cueView(next.value, side.value, colors.value, (index.value + 1) % props.seat.stunts.length) : null,
+  next.value ? cueView(next.value, colors.value, (index.value + 1) % props.seat.stunts.length) : null,
 )
 const mixCount = computed(() => cue.value?.colors.length ?? 0)
 
@@ -190,7 +188,7 @@ onUnmounted(() => {
       @touchend="onTouchEnd"
     >
       <p v-if="current" class="mb-3 text-center text-caption font-semibold text-ink-2">
-        ฉาก {{ index + 1 }}/{{ seat.stunts.length }} · {{ current.code }} {{ current.title }}
+        ฉาก {{ index + 1 }}/{{ seat.stunts.length }} · {{ current.code }} {{ current.title }} · ด้าน {{ current.side }}
       </p>
 
       <div class="w-full max-w-[min(88vw,24rem)]">
@@ -213,18 +211,6 @@ onUnmounted(() => {
         <p v-if="current?.notes" class="mt-1 text-caption text-ink-2">{{ current.notes }}</p>
       </div>
 
-      <div v-if="showSideSwitch" class="mt-3 inline-flex rounded-control border border-line bg-surface p-0.5">
-        <button
-          v-for="s in (['A', 'B'] as const)"
-          :key="s"
-          type="button"
-          class="h-8 rounded-[10px] px-4 text-[13px] font-semibold"
-          :class="side === s ? 'bg-brand text-white' : 'text-ink-2'"
-          @click="side = s"
-        >
-          ด้าน {{ s }}
-        </button>
-      </div>
     </main>
 
     <!-- next cue preview + controls -->
