@@ -4,9 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import { coverLayout, fitFrame, frameAspect, sourceRect } from '@/lib/crop'
-import { GridEditor, colorCounts, despeckle, encodeRle, filledCount, type Grid } from '@/lib/grid'
+import { colorCounts, encodeRle, filledCount, type Grid } from '@/lib/grid'
 import { errorMessage, formatNumber } from '@/lib/format'
-import { applyAdjustments, quantizeImage, type DitherMode } from '@/lib/quantize'
+import type { DitherMode } from '@/lib/quantize'
 import { createGridCanvas } from '@/lib/renderer'
 import * as palettesService from '@/services/palettes'
 import * as standsService from '@/services/stands'
@@ -308,6 +308,55 @@ function toggleColor(id: number) {
   scheduleCompute()
 }
 
+let quantizeWorker: Worker | null = null
+
+function getQuantizeWorker(): Worker {
+  if (!quantizeWorker) {
+    quantizeWorker = new Worker(new URL('../../workers/quantize.worker.ts', import.meta.url), {
+      type: 'module',
+    })
+  }
+  return quantizeWorker
+}
+
+/** ส่งภาพ (Uint8ClampedArray) ไป worker ทำ adjust + quantize + despeckle → คืน Grid */
+function runQuantize(data: Uint8ClampedArray, gw: number, gh: number): Promise<Grid> {
+  return new Promise((resolve, reject) => {
+    const worker = getQuantizeWorker()
+    const onMessage = (event: MessageEvent<{ grid?: Grid; error?: string }>) => {
+      worker.removeEventListener('message', onMessage)
+      if (event.data?.error) reject(new Error(event.data.error))
+      else if (event.data?.grid) resolve(event.data.grid)
+      else reject(new Error('quantize worker ตอบกลับไม่สมบูรณ์'))
+    }
+    worker.addEventListener('message', onMessage)
+    worker.postMessage(
+      {
+        data,
+        gw,
+        gh,
+        adjust: {
+          brightness: adjust.brightness,
+          contrast: adjust.contrast,
+          saturation: adjust.saturation,
+          sharpness: adjust.sharpness,
+        },
+        colors: colors.value.map((c) => ({ id: c.id, hex: c.hex })),
+        options: {
+          dither: dither.value,
+          ditherStrength: ditherStrength.value,
+          allowedIds: allowed.value,
+          alphaThreshold: 16,
+          backgroundColor: useBackground.value ? backgroundHex.value : null,
+          backgroundTolerance: backgroundTolerance.value,
+        },
+        despeckleOn: despeckleOn.value,
+      },
+      { transfer: [data.buffer] },
+    )
+  })
+}
+
 async function compute() {
   const src = base.value
   const p = palette.value
@@ -342,32 +391,9 @@ async function compute() {
     octx.drawImage(src, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, gw, gh)
     const image = octx.getImageData(0, 0, gw, gh)
 
-    applyAdjustments(image.data, gw, gh, {
-      brightness: adjust.brightness,
-      contrast: adjust.contrast,
-      saturation: adjust.saturation,
-      sharpness: adjust.sharpness,
-    })
+    // CPU หนัก (adjust + quantize + despeckle) ย้ายไป worker — ไม่ block main thread
+    const grid = await runQuantize(image.data, gw, gh)
 
-    const grid = quantizeImage(
-      image.data,
-      gw,
-      gh,
-      colors.value.map((c) => ({ id: c.id, hex: c.hex })),
-      {
-        dither: dither.value,
-        ditherStrength: ditherStrength.value,
-        allowedIds: allowed.value,
-        alphaThreshold: 16,
-        backgroundColor: useBackground.value ? backgroundHex.value : null,
-        backgroundTolerance: backgroundTolerance.value,
-      },
-    )
-    if (despeckleOn.value) {
-      const editor = new GridEditor(grid)
-      despeckle(editor, gw, gh)
-      editor.commit()
-    }
     resultGrid.value = grid
     await nextTick()
     drawResult()
@@ -496,6 +522,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointerup', onPointerUp)
   resizeObserver?.disconnect()
   if (computeTimer) window.clearTimeout(computeTimer)
+  quantizeWorker?.terminate()
+  quantizeWorker = null
 })
 </script>
 

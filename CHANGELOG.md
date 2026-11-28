@@ -80,6 +80,19 @@
 
 **Migration:** ไม่มี migration ใหม่
 
+### Feat — Wave 8 (P6: quantize → Web Worker) (2026-11-28)
+
+- ย้ายงาน CPU หนักตอนแปลงรูปเป็นพิกเซล (ปรับแสง + quantize ΔE2000 + despeckle) ออกจาก main thread
+  ไป `src/workers/quantize.worker.ts` — UI ไม่กระตุกตอนแปลง (ImageConverter `compute()` ตอนนี้ `await runQuantize(...)`)
+- worker รับ `Uint8ClampedArray` (transferable) → คืน `Grid` (Int32Array, transferable) · วาด canvas/`getImageData`
+  ยังอยู่ main thread (ถูกมาก) เฉพาะ math หนักย้ายไป worker
+- `skills.md`: บันทึกกับดัก `new URL(..., import.meta.url)` ใน Vue SFC (path สัมพัทธ์กับไฟล์ .vue ไม่ใช่ src/)
+
+**ยังไม่ทำ (P6 ที่เหลือ — เหตุผล):** component test (ขัดปรัชญา pure-module testing — logic อยู่ใน `lib/` และ test แล้ว)
+· list pagination (roster จำกัด `ROSTER_MAX_ROWS=5000` + frontend slice 200) · SSE multi-process (deploy เป็น single replica)
+
+**Migration:** ไม่มี migration ใหม่
+
 ## [0.4.0] — 2026-11-28 — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
 
 ### Phase 5 — Student Viewer PWA (2026-11-27)

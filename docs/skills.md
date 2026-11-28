@@ -3328,3 +3328,14 @@
 - **Context/Problem:** `docker compose run test_runner` build image ไม่ได้ (Alpine ใน container ไม่มี DNS) → รัน backend test ไม่ได้
 - **Correct Pattern/Solution:** verify บน host ด้วย `backend/.venv` ชี้ test Postgres (`localhost:5436`) + Redis (`localhost:6379/15`) · ดู memory `docker-env-gotcha` · เพิ่ม dependency ใหม่ต้องคำนึงว่าด้าน docker build อาจไม่มี network
 - **Date Added:** 2026-11-28
+
+### 🛠️ Vite Web Worker `new URL(..., import.meta.url)` — path สัมพัทธ์กับไฟล์ `.vue` จริง ไม่ใช่ `src/`
+- **Context/Problem:** สร้าง worker จาก `<script setup>` ของ `src/views/admin/X.vue` ด้วย
+  `new URL('../workers/q.worker.ts', import.meta.url)` → build fail
+  `[UNRESOLVED_ENTRY] Cannot resolve entry module src/views/workers/q.worker.ts`
+- **Root Cause:** `import.meta.url` ใน Vue SFC ชี้ที่ตำแหน่งไฟล์ `.vue` จริง (เช่น `src/views/admin/X.vue`)
+  ⇒ `../` ขึ้นหนึ่งชั้นจาก **ไฟล์นั้น** ไม่ใช่จาก `src/` (ไม่มี magic base ที่เป็น root)
+- **Correct Pattern/Solution:** นับ `../` จากตำแหน่ง `.vue` จริง — จาก `src/views/admin/` ไป `src/workers/`
+  = `../../workers/` · เช็คด้วย `ls` ว่าไฟล์ worker อยู่ชั้นไหนจริง · สัญญาณคือ error ขึ้น path ที่มี `views/workers`
+  ทั้งที่ไฟล์อยู่ `src/workers`
+- **Date Added:** 2026-11-28
