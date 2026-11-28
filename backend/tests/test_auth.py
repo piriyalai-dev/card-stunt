@@ -114,6 +114,38 @@ async def test_must_change_password_gate(client, db_pool):
     assert client.get("/api/v1/users", headers={"Authorization": f"Bearer {token}"}).status_code == 200
 
 
+# === password policy ===
+@pytest.mark.asyncio
+async def test_change_password_rejects_weak(client, admin_user):
+    token = client.post("/api/v1/auth/login",
+                        json={"username": "admin_test", "password": "secret123"}).json()["access_token"]
+    # สั้นเกินไป
+    assert client.post("/api/v1/auth/change-password",
+                       json={"old_password": "secret123", "new_password": "short"},
+                       headers={"Authorization": f"Bearer {token}"}).status_code == 422
+    # ไม่มีตัวเลข
+    assert client.post("/api/v1/auth/change-password",
+                       json={"old_password": "secret123", "new_password": "allletters"},
+                       headers={"Authorization": f"Bearer {token}"}).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_user_rejects_weak_password(client, admin):
+    res = client.post("/api/v1/users",
+                      json={"username": "weakuser", "password": "abc", "role": "staff"},
+                      headers={"Authorization": f"Bearer {admin['token']}"})
+    assert res.status_code == 422
+
+
+# === ไม่ leak ว่า user มีจริงไหม (enumeration) ===
+@pytest.mark.asyncio
+async def test_login_does_not_leak_user_existence(client, admin_user):
+    unknown = client.post("/api/v1/auth/login", json={"username": "nobody", "password": "whatever"})
+    wrong_pw = client.post("/api/v1/auth/login", json={"username": "admin_test", "password": "wrongpass"})
+    assert unknown.status_code == wrong_pw.status_code == 401
+    assert unknown.json()["detail"] == wrong_pw.json()["detail"]
+
+
 # === rate limit login ===
 @pytest.mark.asyncio
 async def test_login_rate_limited(client, admin_user):
@@ -126,6 +158,21 @@ async def test_login_rate_limited(client, admin_user):
     ]
     assert statuses[-2] == 401  # ยังไม่ถึงเพดาน
     assert statuses[-1] == 429  # เกินเพดาน
+
+
+@pytest.mark.asyncio
+async def test_check_rate_limit_generic():
+    from core import ratelimit
+    from core.exceptions import RateLimitError
+
+    ratelimit.reset()
+    try:
+        for _ in range(3):
+            await ratelimit.check_rate_limit(["test:rl"], 3, 60)
+        with pytest.raises(RateLimitError):
+            await ratelimit.check_rate_limit(["test:rl"], 3, 60)
+    finally:
+        ratelimit.reset()
 
 
 # === audit change-password ===

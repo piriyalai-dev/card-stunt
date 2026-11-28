@@ -1,5 +1,5 @@
 """
-🚦 Rate limiting สำหรับ login — กัน brute-force (Fixed window)
+🚦 Rate limiting — fixed window (login + การทำงาน bulk อย่าง upload/import/export)
 
 - Redis (ถ้า `REDIS_URL` มีค่า): `INCR` + `EXPIRE` — แชร์ counter ข้าม process
 - in-memory fallback: เมื่อ Redis ว่าง/ล่ม → degrade อย่างปลอดภัย (ลอกแนวคิด core/cache)
@@ -41,14 +41,23 @@ async def _incr_window(key: str, window_seconds: int, limit: int) -> bool:
         return _mem_incr_window(key, window_seconds, limit)
 
 
+async def check_rate_limit(keys: list[str], max_count: int, window_seconds: int,
+                            message: str | None = None) -> None:
+    """Fixed window ทั่วไป — เกินเพดานตัวใดตัวหนึ่งใน `keys` → RateLimitError (429)."""
+    for key in keys:
+        if await _incr_window(key, window_seconds, max_count):
+            raise RateLimitError(message or f"ทำรายการถี่เกินไป — ลองใหม่ใน {max(1, window_seconds // 60)} นาที")
+
+
 async def check_login_rate_limit(ip: str, username: str) -> None:
     """ตรวจทั้ง per-IP และ per-username — เกินเพดานตัวใดตัวหนึ่ง → RateLimitError (429)."""
-    limit = settings.LOGIN_RATE_LIMIT_MAX
-    window = settings.LOGIN_RATE_LIMIT_WINDOW_SECONDS
     ip = ip or "unknown"
-    for key in (f"pixelstand:ratelimit:login:ip:{ip}", f"pixelstand:ratelimit:login:user:{username}"):
-        if await _incr_window(key, window, limit):
-            raise RateLimitError(f"พยายามเข้าสู่ระบบบ่อยเกินไป — ลองใหม่ใน {max(1, window // 60)} นาที")
+    window = settings.LOGIN_RATE_LIMIT_WINDOW_SECONDS
+    await check_rate_limit(
+        [f"pixelstand:ratelimit:login:ip:{ip}", f"pixelstand:ratelimit:login:user:{username}"],
+        settings.LOGIN_RATE_LIMIT_MAX, window,
+        message=f"พยายามเข้าสู่ระบบบ่อยเกินไป — ลองใหม่ใน {max(1, window // 60)} นาที",
+    )
 
 
 def reset() -> None:

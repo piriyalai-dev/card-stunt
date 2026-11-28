@@ -92,6 +92,22 @@ async def audit_context_middleware(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def body_size_limit_middleware(request: Request, call_next):
+    """กัน request ที่มี body ใหญ่เกินไปก่อน endpoint จะ buffer เข้า memory (413)."""
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > settings.MAX_REQUEST_BODY_MB * 1024 * 1024:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": f"ขนาด request เกิน {settings.MAX_REQUEST_BODY_MB} MB"},
+                )
+        except ValueError:
+            pass
+    return await call_next(request)
+
+
 app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(users_router.router, prefix="/api/v1")
 app.include_router(events_router.router, prefix="/api/v1")

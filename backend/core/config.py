@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     LOGIN_RATE_LIMIT_MAX: int = 10
     LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = 300
 
+    # Rate limit การทำงาน bulk (upload reference image / import roster / สร้าง export) — per user
+    BULK_OP_RATE_LIMIT_MAX: int = 60
+    BULK_OP_RATE_LIMIT_WINDOW_SECONDS: int = 3600
+
+    # ขนาด request body สูงสุด (gateway กัน buffer ของใหญ่ก่อนถึง endpoint)
+    MAX_REQUEST_BODY_MB: int = 20
+
     # CORS — origin ของ frontend ที่อนุญาตให้เรียก API (คั่นด้วย comma)
     # ค่าเริ่มต้นรวม dev server + โดเมนจริงของเครื่องนี้ (override ได้ผ่าน .env)
     CORS_ORIGINS: str = (

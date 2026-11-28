@@ -28,3 +28,16 @@ async def test_health_db_down_returns_503(client):
         assert res.json()["status"] == "error"
     finally:
         app.state.db_pool = real
+
+
+@pytest.mark.asyncio
+async def test_body_size_limit_returns_413(client):
+    from core.config import settings
+
+    original = settings.MAX_REQUEST_BODY_MB
+    settings.MAX_REQUEST_BODY_MB = 0  # reject ทุก body ที่ไม่ว่าง
+    try:
+        res = client.post("/api/v1/auth/login", json={"username": "a", "password": "b"})
+        assert res.status_code == 413
+    finally:
+        settings.MAX_REQUEST_BODY_MB = original

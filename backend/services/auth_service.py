@@ -40,7 +40,7 @@ async def authenticate_user(pool: asyncpg.Pool, username: str, password: str) ->
         )
         if not row:
             await _audit_login(conn, username, None, False)
-            raise NotFoundError("ไม่พบชื่อผู้ใช้นี้ หรือรหัสผ่านไม่ถูกต้อง")
+            raise NotFoundError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
         if not verify_password(password, row["password_hash"]):
             await _audit_login(conn, username, row["id"], False)
             raise ForbiddenError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")

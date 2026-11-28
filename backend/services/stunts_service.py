@@ -6,6 +6,7 @@ from core import media
 from core.config import settings
 from core.exceptions import ConflictError, NotFoundError, ValidationError
 from core.logger import AuditLogger
+from core.ratelimit import check_rate_limit
 from core.rbac import require_permission
 
 STUNT_COLS = (
@@ -343,6 +344,10 @@ async def restore_revision(pool: asyncpg.Pool, actor_id: int, stunt_id: int, rev
 
 
 async def upload_reference(pool: asyncpg.Pool, actor_id: int, stunt_id: int, content: bytes, filename: str) -> dict:
+    await check_rate_limit(
+        [f"pixelstand:ratelimit:upload:user:{actor_id}"],
+        settings.BULK_OP_RATE_LIMIT_MAX, settings.BULK_OP_RATE_LIMIT_WINDOW_SECONDS,
+    )
     stunt = await get_stunt(pool, stunt_id)
     paths = await media.save_reference(stunt_id, content, filename)
     async with pool.acquire() as conn:

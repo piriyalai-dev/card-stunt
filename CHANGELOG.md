@@ -14,6 +14,15 @@
 
 **Migration:** ไม่มี migration ใหม่
 
+### Fix — Wave 2 (security round 2) (2026-11-28)
+
+- login ไม่ leak ว่า user มีจริงไหม (unify error message unknown-user ↔ wrong-password)
+- password policy: รหัสผ่านใหม่ต้อง ≥8 ตัว + มีทั้งตัวอักษรและตัวเลข (change-password + create/update user)
+- rate limit งาน bulk ต่อ user (upload reference image / import roster / สร้าง export) — `BULK_OP_RATE_LIMIT_MAX` / `BULK_OP_RATE_LIMIT_WINDOW_SECONDS`
+- gateway body-size limit: ปฏิเสธ request ที่ body เกิน `MAX_REQUEST_BODY_MB` ด้วย 413 ก่อน buffer เข้า memory
+
+**Migration:** ไม่มี migration ใหม่
+
 ## [0.4.0] — 2026-11-28 — Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)
 
 ### Phase 5 — Student Viewer PWA (2026-11-27)

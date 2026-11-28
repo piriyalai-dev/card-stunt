@@ -16,6 +16,7 @@ from core import exports_io
 from core.config import settings
 from core.exceptions import ConflictError, NotFoundError, ValidationError
 from core.logger import AuditLogger
+from core.ratelimit import check_rate_limit
 from core.rbac import require_permission
 from services import export_builders
 
@@ -37,6 +38,10 @@ _EXTENSIONS = {"pdf": "pdf", "csv": "csv", "zip": "zip"}
 # ── create / list / retry ───────────────────────────────────────────
 
 async def create_export(pool: asyncpg.Pool, actor_id: int, event_id: int, data: dict) -> dict:
+    await check_rate_limit(
+        [f"pixelstand:ratelimit:export:user:{actor_id}"],
+        settings.BULK_OP_RATE_LIMIT_MAX, settings.BULK_OP_RATE_LIMIT_WINDOW_SECONDS,
+    )
     async with pool.acquire() as conn:
         async with conn.transaction():
             await require_permission(conn, actor_id, "EXPORT")

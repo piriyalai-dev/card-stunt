@@ -8,6 +8,7 @@ from core.config import settings
 from core.exceptions import ConflictError, NotFoundError, PayloadTooLargeError, ValidationError
 from core.grid import StandGeometry, is_blocked, seat_labels
 from core.logger import AuditLogger
+from core.ratelimit import check_rate_limit
 from core.rbac import require_permission
 
 ROSTER_COLS = "id, event_id, stand_id, row_index, col_index, row_label, seat_label, student_code, student_name, note, created_at, updated_at"
@@ -112,6 +113,10 @@ async def delete_roster(pool: asyncpg.Pool, actor_id: int, roster_id: int) -> No
 
 async def import_roster(pool: asyncpg.Pool, actor_id: int, event_id: int, stand_id: int, content: bytes, filename: str) -> dict:
     """import CSV/XLSX — คอลัมน์ row/col (0-based หรือ 1-based ตาม label), student_code, student_name, note."""
+    await check_rate_limit(
+        [f"pixelstand:ratelimit:import:user:{actor_id}"],
+        settings.BULK_OP_RATE_LIMIT_MAX, settings.BULK_OP_RATE_LIMIT_WINDOW_SECONDS,
+    )
     if len(content) > settings.ROSTER_FILE_SIZE_LIMIT_MB * 1024 * 1024:
         raise PayloadTooLargeError(f"ไฟล์เกิน {settings.ROSTER_FILE_SIZE_LIMIT_MB} MB")
 
