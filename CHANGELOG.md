@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased] — Security & deploy hardening + JWT access/refresh + P3 features
+## [Unreleased] — ยังไม่ตัดเวอร์ชัน
+
+## [0.5.0] — 2026-11-28 — Security & deploy hardening + JWT access/refresh + P3 features
 
 ### Fix — Wave 1 (บั๊ก + security) (2026-11-28)
 
@@ -197,7 +199,8 @@
 
 **Migration:** `001_init_auth` — DB schema เริ่มจาก `core/init_db.py` (users)
 
-[Unreleased]: https://github.com/piriyalai-dev/card-stunt/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/piriyalai-dev/card-stunt/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/piriyalai-dev/card-stunt/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/piriyalai-dev/card-stunt/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/piriyalai-dev/card-stunt/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/piriyalai-dev/card-stunt/compare/v0.3.0...v0.3.1

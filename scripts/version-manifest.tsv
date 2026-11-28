@@ -7,4 +7,5 @@
 0.3.0	2026-11-28	d25fb4185051	minor	Phase 4 Frontend Admin + Engine	main
 0.3.1	2026-11-28	4fb0fc826e3e	patch	Deploy wiring: CORS + Redis + media volume	main
 0.3.2	2026-11-28	3879a840e587	patch	Docker build context hygiene	main
-0.4.0	2026-11-28	RELEASE	minor	Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)	main
+0.4.0	2026-11-28	e7b9315137fa	minor	Phase 5 Viewer PWA + Export + Media (+ deploy hotfixes)	main
+0.5.0	2026-11-28	RELEASE	minor	Security & deploy hardening + JWT access/refresh + P3 features	main

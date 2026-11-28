@@ -22,7 +22,7 @@ def _read_secret(name: str) -> str | None:
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Pixel Stand API (ระบบแปรอักษรกีฬาสี)"
-    PROJECT_VERSION: str = "0.4.0"
+    PROJECT_VERSION: str = "0.5.0"
     # commit ที่ build image นี้ — ส่งมาจาก build arg (pull_all.sh / setup.sh)
     GIT_SHA: str = "unknown"
 
