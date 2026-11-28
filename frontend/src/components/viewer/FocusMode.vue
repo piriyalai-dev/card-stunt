@@ -192,15 +192,12 @@ onUnmounted(() => {
       </p>
 
       <div class="w-full max-w-[min(88vw,24rem)]">
-        <PlateGrid v-if="cue" :plate="cue.plate" :colors="colors" :show-codes="false" :gap="4" />
+        <PlateGrid v-if="cue" :plate="cue.plate" :colors="colors" :show-codes="true" :gap="4" code-class="text-xl sm:text-2xl" />
       </div>
 
       <div class="mt-4 text-center">
         <div data-testid="focus-code" class="font-display text-6xl font-extrabold leading-none text-ink-1">
-          {{ cue?.dominant.color?.code ?? '—' }}
-        </div>
-        <div data-testid="focus-color" class="mt-1 text-title-m font-bold text-ink-1">
-          {{ cue?.dominant.color?.name_th ?? (cue && cue.dominant.total === 0 ? 'ช่องว่าง' : '—') }}
+          ด้าน {{ current?.side ?? '—' }}
         </div>
         <p v-if="mixCount > 1" class="mt-1 text-caption text-ink-2">
           ใช้ {{ mixCount }} สี —

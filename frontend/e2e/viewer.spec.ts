@@ -20,13 +20,11 @@ test('ผู้ชม: ใส่รหัสล็อกอิน → โพย 
 
   await page.getByRole('button', { name: 'เปิดโหมดโฟกัส' }).click()
 
-  await expect(page.getByTestId('focus-code')).toHaveText('01')
-  await expect(page.getByTestId('focus-color')).toHaveText('แดงสด')
+  await expect(page.getByTestId('focus-code')).toHaveText('ด้าน A')
   await expect(page.getByTestId('next-cue')).toContainText('02 (ขาว)')
 
   await page.getByRole('button', { name: 'ฉากถัดไป' }).click()
-  await expect(page.getByTestId('focus-code')).toHaveText('02')
-  await expect(page.getByTestId('focus-color')).toHaveText('ขาว')
+  await expect(page.getByTestId('focus-code')).toHaveText('ด้าน B')
   await expect(page.getByTestId('next-cue')).toContainText('01 (แดงสด)')
 })
 

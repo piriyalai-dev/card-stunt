@@ -13,8 +13,9 @@ const props = withDefaults(
     colors: Map<number, PublicColor>
     showCodes?: boolean
     gap?: number
+    codeClass?: string
   }>(),
-  { showCodes: true, gap: 3 },
+  { showCodes: true, gap: 3, codeClass: 'text-[9px] sm:text-[10px]' },
 )
 
 const cols = computed(() => props.plate?.[0]?.length ?? 0)
@@ -54,7 +55,7 @@ function codeOf(id: number | null): string {
         v-for="(cell, c) in row"
         :key="c"
         class="grid aspect-square min-w-0 place-items-center rounded-[3px] font-bold leading-none"
-        :class="showCodes ? 'text-[9px] sm:text-[10px]' : ''"
+        :class="showCodes ? codeClass : ''"
         :style="cellStyle(cell)"
         :title="colorOf(cell) ? `${colorOf(cell)?.code} ${colorOf(cell)?.name_th}` : 'ว่าง'"
       >
