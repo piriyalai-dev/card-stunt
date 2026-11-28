@@ -24,9 +24,11 @@ async def get_live_state(pool: asyncpg.Pool, event_id: int) -> dict:
 
 
 async def _state(conn, event_row) -> dict:
+    # คิวแสดง = live_queue (ไม่ใช่ order_index ของคลังฉาก)
     stunts = await conn.fetch(
-        "SELECT id, order_index FROM stunts WHERE event_id = $1 AND deleted_at IS NULL AND status = 'published'"
-        " ORDER BY order_index, id",
+        "SELECT s.id FROM live_queue q JOIN stunts s ON s.id = q.stunt_id"
+        " WHERE q.event_id = $1 AND s.deleted_at IS NULL AND s.status = 'published'"
+        " ORDER BY q.position",
         event_row["id"],
     )
     ids = [s["id"] for s in stunts]
@@ -55,8 +57,9 @@ async def advance(pool: asyncpg.Pool, actor_id: int, event_id: int, action: str,
                 raise NotFoundError("ไม่พบ event")
             ids = [
                 s["id"] for s in await conn.fetch(
-                    "SELECT id FROM stunts WHERE event_id = $1 AND deleted_at IS NULL AND status = 'published'"
-                    " ORDER BY order_index, id", event_id,
+                    "SELECT s.id FROM live_queue q JOIN stunts s ON s.id = q.stunt_id"
+                    " WHERE q.event_id = $1 AND s.deleted_at IS NULL AND s.status = 'published'"
+                    " ORDER BY q.position", event_id,
                 )
             ]
             if not ids:

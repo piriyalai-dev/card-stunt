@@ -8,6 +8,7 @@ import { colorCounts, encodeRle, filledCount, type Grid } from '@/lib/grid'
 import { errorMessage, formatNumber } from '@/lib/format'
 import type { DitherMode } from '@/lib/quantize'
 import { createGridCanvas } from '@/lib/renderer'
+import * as eventsService from '@/services/events'
 import * as palettesService from '@/services/palettes'
 import * as standsService from '@/services/stands'
 import * as stuntsService from '@/services/stunts'
@@ -24,13 +25,15 @@ const loading = ref(true)
 const error = ref('')
 const message = ref('')
 
-const side = ref<'a' | 'b'>('a')
+const side = ref<'A' | 'B'>('A')
+const eventPaletteA = ref<number | null>(null)
+const eventPaletteB = ref<number | null>(null)
 
 const gridWidth = computed(() => stunt.value?.grid_width ?? 0)
 const gridHeight = computed(() => stunt.value?.grid_height ?? 0)
 
 const paletteId = computed(() =>
-  side.value === 'a' ? stunt.value?.palette_a_id : stunt.value?.palette_b_id,
+  side.value === 'A' ? eventPaletteA.value : eventPaletteB.value,
 )
 const palette = computed(
   () => palettes.value.find((p) => p.id === paletteId.value) ?? null,
@@ -51,7 +54,10 @@ async function load() {
     stunt.value = st
     stand.value = await standsService.getStand(st.stand_id)
     palettes.value = await palettesService.listPalettes(st.event_id)
-    side.value = st.palette_a_id ? 'a' : st.palette_b_id ? 'b' : 'a'
+    const ev = await eventsService.getEvent(st.event_id)
+    eventPaletteA.value = ev.palette_a_id
+    eventPaletteB.value = ev.palette_b_id
+    side.value = st.side
     resetAllowed()
   } catch (e) {
     error.value = errorMessage(e)
@@ -71,10 +77,10 @@ watch(paletteId, () => {
   scheduleCompute()
 })
 
-const canUseSideB = computed(() => !!stunt.value?.palette_b_id)
+const canUseSideB = computed(() => !!eventPaletteB.value)
 
-function setSide(next: 'a' | 'b') {
-  if (next === 'b' && !canUseSideB.value) return
+function setSide(next: 'A' | 'B') {
+  if (next === 'B' && !canUseSideB.value) return
   side.value = next
 }
 
@@ -448,7 +454,6 @@ function applyToStudio() {
   sessionStorage.setItem(
     pendingKey(stunt.value.id),
     JSON.stringify({
-      side: side.value,
       width: gridWidth.value,
       height: gridHeight.value,
       rle: encodeRle(resultGrid.value),
@@ -547,17 +552,17 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="h-9 rounded-lg px-3 text-[13px] font-semibold"
-          :class="side === 'a' ? 'bg-brand-tint text-brand' : 'text-ink-2'"
-          @click="setSide('a')"
+          :class="side === 'A' ? 'bg-brand-tint text-brand' : 'text-ink-2'"
+          @click="setSide('A')"
         >
           ด้าน A
         </button>
         <button
           type="button"
           class="h-9 rounded-lg px-3 text-[13px] font-semibold disabled:opacity-40"
-          :class="side === 'b' ? 'bg-brand-tint text-brand' : 'text-ink-2'"
+          :class="side === 'B' ? 'bg-brand-tint text-brand' : 'text-ink-2'"
           :disabled="!canUseSideB"
-          @click="setSide('b')"
+          @click="setSide('B')"
         >
           ด้าน B
         </button>
@@ -575,7 +580,7 @@ onBeforeUnmount(() => {
 
     <AppCard v-else-if="!palette" :padded="true">
       <p class="text-caption text-ink-2">
-        ฉากนี้ยังไม่มีชุดสีสำหรับด้าน {{ side.toUpperCase() }} — กลับไปกำหนดชุดสีในหน้าแก้ไขฉากก่อน
+        ฉากนี้ยังไม่มีชุดสีสำหรับด้าน {{ side }} — ไปที่หน้า ภาพรวม → ตั้งค่างาน เพื่อกำหนดชุดสีก่อน
       </p>
     </AppCard>
 

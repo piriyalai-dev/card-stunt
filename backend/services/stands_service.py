@@ -131,7 +131,7 @@ async def resize_stand(pool: asyncpg.Pool, actor_id: int, stand_id: int, data: d
 
             has_grid = bool(await conn.fetchval(
                 "SELECT 1 FROM stunts WHERE stand_id = $1 AND deleted_at IS NULL"
-                " AND (grid_data_a IS NOT NULL OR grid_data_b IS NOT NULL) LIMIT 1", stand_id,
+                " AND grid_data IS NOT NULL LIMIT 1", stand_id,
             ))
             if has_grid and not data.get("allow_crop"):
                 raise ConflictError("มี stunt ที่มี grid แล้ว — ต้องระบุ allow_crop=true เพื่อ crop/pad")
@@ -147,18 +147,16 @@ async def resize_stand(pool: asyncpg.Pool, actor_id: int, stand_id: int, data: d
             # crop/pad grid ของทุก stunt ให้ตรงขนาดใหม่ (top-left anchor) + snapshot revision
             if has_grid:
                 stunts = await conn.fetch(
-                    "SELECT id, grid_width, grid_height, grid_data_a, grid_data_b FROM stunts"
+                    "SELECT id, grid_width, grid_height, grid_data FROM stunts"
                     " WHERE stand_id = $1 AND deleted_at IS NULL", stand_id,
                 )
                 for st in stunts:
-                    a = json.loads(st["grid_data_a"]) if isinstance(st["grid_data_a"], str) else st["grid_data_a"]
-                    b = json.loads(st["grid_data_b"]) if isinstance(st["grid_data_b"], str) else st["grid_data_b"]
-                    new_a = crop_or_pad_grid(a or [], st["grid_width"], st["grid_height"], new_g.grid_width, new_g.grid_height)
-                    new_b = crop_or_pad_grid(b or [], st["grid_width"], st["grid_height"], new_g.grid_width, new_g.grid_height)
+                    data = json.loads(st["grid_data"]) if isinstance(st["grid_data"], str) else st["grid_data"]
+                    new_data = crop_or_pad_grid(data or [], st["grid_width"], st["grid_height"], new_g.grid_width, new_g.grid_height)
                     await conn.execute(
-                        "UPDATE stunts SET grid_width = $1, grid_height = $2, grid_data_a = $3::jsonb,"
-                        " grid_data_b = $4::jsonb, status = 'ready', updated_at = NOW() WHERE id = $5",
-                        new_g.grid_width, new_g.grid_height, json.dumps(new_a), json.dumps(new_b), st["id"],
+                        "UPDATE stunts SET grid_width = $1, grid_height = $2, grid_data = $3::jsonb,"
+                        " status = 'ready', updated_at = NOW() WHERE id = $4",
+                        new_g.grid_width, new_g.grid_height, json.dumps(new_data), st["id"],
                     )
 
             await AuditLogger("stands").log(

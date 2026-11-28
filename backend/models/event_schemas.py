@@ -18,7 +18,8 @@ class EventUpdate(BaseModel):
     event_date: Optional[date] = None
     status: Optional[str] = Field(None, pattern="^(draft|active|archived)$")
     public_access_enabled: Optional[bool] = None
-    roster_lookup_enabled: Optional[bool] = None
+    palette_a_id: Optional[int] = None
+    palette_b_id: Optional[int] = None
 
 
 class EventOut(BaseModel):
@@ -31,7 +32,8 @@ class EventOut(BaseModel):
     version: int
     published_version: int
     public_access_enabled: bool
-    roster_lookup_enabled: bool
+    palette_a_id: Optional[int] = None
+    palette_b_id: Optional[int] = None
     live_stunt_id: Optional[int] = None
     live_is_active: bool = False
     created_at: datetime

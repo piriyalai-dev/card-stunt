@@ -41,7 +41,7 @@ export async function getGrid(stuntId: number): Promise<StuntGrid> {
 
 export async function saveGrid(
   stuntId: number,
-  body: { grid_data_a?: Array<number | null>; grid_data_b?: Array<number | null>; note?: string },
+  body: { grid_data?: Array<number | null>; note?: string },
 ): Promise<StuntOut> {
   return (await api.put(`/api/v1/stunts/${stuntId}/grid`, body)) as unknown as StuntOut
 }

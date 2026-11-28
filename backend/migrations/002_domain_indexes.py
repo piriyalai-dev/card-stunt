@@ -58,12 +58,8 @@ async def upgrade(conn) -> None:
     await conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_stunts_stand ON stunts(stand_id) WHERE deleted_at IS NULL"
     )
-    await conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_stunts_palette_a ON stunts(palette_a_id) WHERE deleted_at IS NULL"
-    )
-    await conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_stunts_palette_b ON stunts(palette_b_id) WHERE deleted_at IS NULL"
-    )
+    # NOTE: idx_stunts_palette_a/b ถูกถอดออก (006) — คอลัมน์ palette_a_id/palette_b_id
+    # บน stunts ถูกลบออก เปลี่ยนเป็น events.palette_a_id/palette_b_id แทน
 
     # stunt_revisions
     await conn.execute(

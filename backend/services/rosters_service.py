@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import secrets
 
 import asyncpg
 
@@ -11,7 +12,27 @@ from core.logger import AuditLogger
 from core.ratelimit import check_rate_limit
 from core.rbac import require_permission
 
-ROSTER_COLS = "id, event_id, stand_id, row_index, col_index, row_label, seat_label, student_code, student_name, note, created_at, updated_at"
+ROSTER_COLS = "id, event_id, stand_id, row_index, col_index, row_label, seat_label, student_code, access_code, student_name, note, created_at, updated_at"
+
+# charset ไม่กำกวม (ตัด 0/O/1/I) — รหัสล็อกอินที่พิมพ์แจกนักเรียน
+_ACCESS_CODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def _random_access_code() -> str:
+    return "".join(secrets.choice(_ACCESS_CODE_CHARSET) for _ in range(8))
+
+
+async def _mint_access_code(conn: asyncpg.Connection, event_id: int) -> str:
+    """สร้างรหัสล็อกอินสุ่ม unique ต่อ event (unique index เป็น safety net กัน race)."""
+    for _ in range(10):
+        code = _random_access_code()
+        exists = await conn.fetchval(
+            "SELECT 1 FROM seat_rosters WHERE event_id = $1 AND access_code = $2 AND deleted_at IS NULL",
+            event_id, code,
+        )
+        if not exists:
+            return code
+    raise ConflictError("สร้างรหัสล็อกอินไม่สำเร็จ (ชนกัน) — ลองใหม่")
 
 
 async def get_roster(pool: asyncpg.Pool, roster_id: int) -> dict:
@@ -48,12 +69,13 @@ async def create_roster(pool: asyncpg.Pool, actor_id: int, event_id: int, data: 
             rl, sl = seat_labels(data["row_index"], data["col_index"], g,
                                  row["row_label_style"], row["col_label_style"],
                                  row["row_label_prefix"], row["col_label_prefix"])
+            access_code = await _mint_access_code(conn, event_id)
             try:
                 rid = await conn.fetchval(
                     "INSERT INTO seat_rosters (event_id, stand_id, row_index, col_index, row_label, seat_label,"
-                    " student_code, student_name, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id",
+                    " student_code, access_code, student_name, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
                     event_id, data["stand_id"], data["row_index"], data["col_index"], rl, sl,
-                    data.get("student_code"), data["student_name"], data.get("note"),
+                    data.get("student_code"), access_code, data["student_name"], data.get("note"),
                 )
             except asyncpg.UniqueViolationError:
                 raise ConflictError("ที่นั่งนี้มีนักเรียนอยู่แล้ว (หรือ student_code ซ้ำ)")
@@ -148,13 +170,14 @@ async def import_roster(pool: asyncpg.Pool, actor_id: int, event_id: int, stand_
                     student_name = (_cell_text(r.get("student_name")) or _cell_text(r.get("name")))
                     if not student_name:
                         raise ValidationError("student_name ห้ามว่าง")
+                    access_code = await _mint_access_code(conn, event_id)
                     try:
                         await conn.execute(
                             "INSERT INTO seat_rosters (event_id, stand_id, row_index, col_index, row_label,"
-                            " seat_label, student_code, student_name, note)"
-                            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                            " seat_label, student_code, access_code, student_name, note)"
+                            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
                             event_id, stand_id, row_index, col_index, rl, sl, student_code,
-                            student_name, r.get("note"),
+                            access_code, student_name, r.get("note"),
                         )
                         inserted += 1
                     except asyncpg.UniqueViolationError:

@@ -11,8 +11,7 @@ class StuntCreate(BaseModel):
     notes: Optional[str] = None
     order_index: int = 0
     stand_id: Optional[int] = None
-    palette_a_id: Optional[int] = None
-    palette_b_id: Optional[int] = None
+    side: str = Field("A", pattern="^(A|B)$")
 
 
 class StuntUpdate(BaseModel):
@@ -22,14 +21,12 @@ class StuntUpdate(BaseModel):
     notes: Optional[str] = None
     order_index: Optional[int] = None
     status: Optional[str] = Field(None, pattern="^(draft|ready|published)$")
-    palette_a_id: Optional[int] = None
-    palette_b_id: Optional[int] = None
+    side: Optional[str] = Field(None, pattern="^(A|B)$")
     reference_transform: Optional[dict] = None
 
 
 class GridUpdate(BaseModel):
-    grid_data_a: Optional[List] = None
-    grid_data_b: Optional[List] = None
+    grid_data: Optional[List] = None
     note: Optional[str] = None
 
 
@@ -41,8 +38,7 @@ class StuntOut(BaseModel):
     id: int
     event_id: int
     stand_id: int
-    palette_a_id: Optional[int] = None
-    palette_b_id: Optional[int] = None
+    side: str
     code: str
     title: str
     section: Optional[str] = None
@@ -61,8 +57,7 @@ class StuntOut(BaseModel):
 class GridOut(BaseModel):
     grid_width: int
     grid_height: int
-    grid_data_a: List[Optional[int]] = []
-    grid_data_b: List[Optional[int]] = []
+    grid_data: List[Optional[int]] = []
 
 
 class RevisionOut(BaseModel):
@@ -77,7 +72,5 @@ class RevisionOut(BaseModel):
 
 class StuntStats(BaseModel):
     total_cells: int
-    filled_a: int
-    filled_b: int
-    color_counts_a: dict
-    color_counts_b: dict
+    filled: int
+    color_counts: dict

@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from pydantic import BaseModel
 
 
 class PublicPaletteColor(BaseModel):
+    id: int
     code: str
     name_th: str
     hex: str
@@ -15,28 +16,6 @@ class PublicPalette(BaseModel):
     id: int
     name: str
     colors: List[PublicPaletteColor] = []
-
-
-class PublicStand(BaseModel):
-    id: int
-    name: str
-    rows: int
-    cols: int
-    sub_rows: int
-    sub_cols: int
-    row_label_style: str
-    col_label_style: str
-    row_label_prefix: str
-    col_label_prefix: str
-    blocked_seats: list
-
-
-class PublicStuntSummary(BaseModel):
-    id: int
-    code: str
-    title: str
-    order_index: int
-    status: str
 
 
 class PublicLiveState(BaseModel):
@@ -51,10 +30,17 @@ class PublicMeta(BaseModel):
     slug: str
     name: str
     published_version: int
-    stands: List[PublicStand] = []
-    palettes: List[PublicPalette] = []
-    stunts: List[PublicStuntSummary] = []
+    event_date: Optional[date] = None
     live: PublicLiveState
+
+
+class PublicSeatStunt(BaseModel):
+    id: int
+    code: str
+    title: str
+    notes: Optional[str] = None
+    side: str
+    plate: List[List[Optional[int]]] = []
 
 
 class PublicSeat(BaseModel):
@@ -65,7 +51,8 @@ class PublicSeat(BaseModel):
     row_label: str
     seat_label: str
     student: Optional[dict] = None
-    stunts: List[dict] = []  # ทุกฉาก published: {id, code, title, side_a, side_b}
+    palettes: List[PublicPalette] = []
+    stunts: List[PublicSeatStunt] = []
 
 
 class PublicVersion(BaseModel):

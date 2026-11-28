@@ -37,12 +37,12 @@ import {
 } from '@/lib/grid'
 import { exportGridPngDataUrl, lookupFromColors } from '@/lib/renderer'
 import { absoluteApiUrl } from '@/services/publicApi'
+import * as eventsService from '@/services/events'
 import * as palettesService from '@/services/palettes'
 import * as standsService from '@/services/stands'
 import * as stuntsService from '@/services/stunts'
 import type { PaletteOut, RevisionOut, StandOut, StuntOut } from '@/types/domain'
 
-type Side = 'a' | 'b'
 type Tool =
   | 'brush'
   | 'eraser'
@@ -77,14 +77,14 @@ const message = ref('')
 
 const gridW = ref(0)
 const gridH = ref(0)
-const gridA = shallowRef<Grid>(new Int32Array(0))
-const gridB = shallowRef<Grid>(new Int32Array(0))
-const side = ref<Side>('a')
+const grid = shallowRef<Grid>(new Int32Array(0))
 const revision = ref(0)
 const countsTick = ref(0)
 
-const historyA = new GridHistory()
-const historyB = new GridHistory()
+const eventPaletteA = ref<number | null>(null)
+const eventPaletteB = ref<number | null>(null)
+
+const history = new GridHistory()
 const historyTick = ref(0)
 
 const dirty = ref(false)
@@ -131,8 +131,7 @@ const revisions = ref<RevisionOut[]>([])
 interface DraftPayload {
   w: number
   h: number
-  a: string
-  b: string
+  g: string
   at: number
 }
 const draftBanner = ref<DraftPayload | null>(null)
@@ -140,13 +139,12 @@ const draftSavedAt = ref<string | null>(null)
 
 // ── derived ──────────────────────────────────────────────────────
 const paletteId = computed(() =>
-  side.value === 'a' ? stunt.value?.palette_a_id : stunt.value?.palette_b_id,
+  stunt.value?.side === 'B' ? eventPaletteB.value : eventPaletteA.value,
 )
 const palette = computed(() => palettes.value.find((p) => p.id === paletteId.value) ?? null)
 const colors = computed(() => palette.value?.colors ?? [])
 const lookup = computed(() => lookupFromColors(colors.value))
 const canEdit = computed(() => !!palette.value && colors.value.length > 0)
-const canUseSideB = computed(() => !!stunt.value?.palette_b_id)
 
 const geometry = computed(() => (stand.value ? geometryOf(stand.value) : null))
 /** fallback สำหรับ template ก่อนข้อมูลโหลดครบ (ไม่ควรถูกใช้เมื่อ v-else-if ผ่าน) */
@@ -173,32 +171,27 @@ const blocked = computed(
 )
 
 function currentGrid(): Grid {
-  return side.value === 'a' ? gridA.value : gridB.value
+  return grid.value
 }
 
-/** ดาวน์โหลดกริดด้านที่กำลังดูเป็น PNG (8 px ต่อช่อง) */
+/** ดาวน์โหลดกริดเป็น PNG (8 px ต่อช่อง) */
 function downloadPng(): void {
-  const grid = currentGrid()
-  if (!grid.length || !gridW.value || !gridH.value) return
-  const url = exportGridPngDataUrl(grid, gridW.value, gridH.value, lookup.value, 8)
+  const g = grid.value
+  if (!g.length || !gridW.value || !gridH.value) return
+  const url = exportGridPngDataUrl(g, gridW.value, gridH.value, lookup.value, 8)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${stunt.value?.code ?? 'stunt'}-${side.value}.png`
+  a.download = `${stunt.value?.code ?? 'stunt'}-${stunt.value?.side ?? 'a'}.png`
   a.click()
 }
 
-function historyFor(target: Side): GridHistory {
-  return target === 'a' ? historyA : historyB
-}
-
 const canUndo = computed(() => {
-  // อ่าน tick เพื่อให้ computed ถูก invalidate เมื่อประวัติ/ด้านเปลี่ยน
   if (historyTick.value < 0) return false
-  return historyFor(side.value).canUndo
+  return history.canUndo
 })
 const canRedo = computed(() => {
   if (historyTick.value < 0) return false
-  return historyFor(side.value).canRedo
+  return history.canRedo
 })
 
 const selectedColor = computed(
@@ -206,9 +199,9 @@ const selectedColor = computed(
 )
 
 const counts = computed(() => {
-  // ผูก dependency กับ tick/ด้าน — ไม่นับใหม่ทุก pointermove (ดู `countsTick`)
+  // ผูก dependency กับ tick — ไม่นับใหม่ทุก pointermove (ดู `countsTick`)
   if (countsTick.value < 0) return new Map<number, number>()
-  return colorCounts(side.value === 'a' ? gridA.value : gridB.value)
+  return colorCounts(grid.value)
 })
 
 const filled = computed(() => {
@@ -245,17 +238,18 @@ async function load() {
     stunt.value = st
     stand.value = await standsService.getStand(st.stand_id)
     palettes.value = await palettesService.listPalettes(st.event_id)
+    const ev = await eventsService.getEvent(st.event_id)
+    eventPaletteA.value = ev.palette_a_id
+    eventPaletteB.value = ev.palette_b_id
     gridW.value = st.grid_width
     gridH.value = st.grid_height
     textSize.value = Math.max(8, Math.floor(st.grid_height / 2))
 
-    const grid = await stuntsService.getGrid(st.id)
-    gridA.value = fromApiGrid(grid.grid_data_a, grid.grid_width, grid.grid_height)
-    gridB.value = fromApiGrid(grid.grid_data_b, grid.grid_width, grid.grid_height)
+    const g = await stuntsService.getGrid(st.id)
+    grid.value = fromApiGrid(g.grid_data, g.grid_width, g.grid_height)
     revision.value += 1
     countsTick.value += 1
 
-    side.value = st.palette_a_id ? 'a' : st.palette_b_id ? 'b' : 'a'
     syncSelectedColor()
 
     const pending = takePendingImport()
@@ -263,7 +257,7 @@ async function load() {
       // 🔑 งานที่ยังไม่บันทึก (draft) ต้องมาก่อน แล้ว import ทับเป็นอีก 1 undo step
       //    ⇒ ผู้ใช้ไม่เสียสิ่งที่วาดไว้ก่อนไปหน้าแปลงรูป
       restoreDraftSilently()
-      applyGridReplacement(pending.side, pending.grid, '')
+      applyGridReplacement(pending.grid, '')
       localStorage.removeItem(draftKey.value)
       draftBanner.value = null
       message.value = 'นำเข้าจากตัวแปลงเป็นพิกเซลแล้ว'
@@ -306,62 +300,45 @@ watch(paletteId, () => {
   revision.value += 1
 })
 
-watch(side, () => {
-  syncSelectedColor()
-  countsTick.value += 1
-  revision.value += 1
-  preview.value = null
-  selection.value = null
-  moving = null
-  selectStart = null
-})
-
 // ── pending import / draft ──────────────────────────────────────
 const pendingKey = (id: number) => `pixelstand:pending-import:${id}`
 
-function takePendingImport(): { side: Side; grid: Grid } | null {
+function takePendingImport(): { grid: Grid } | null {
   const key = pendingKey(stuntId.value)
   const raw = sessionStorage.getItem(key)
   if (!raw) return null
   sessionStorage.removeItem(key)
   try {
     const data = JSON.parse(raw) as {
-      side?: Side
       width?: number
       height?: number
       rle?: string
     }
-    const target = data.side === 'b' ? 'b' : 'a'
     if (data.width !== gridW.value || data.height !== gridH.value || !data.rle) {
       message.value = 'ผลลัพธ์จากตัวแปลงมีขนาดไม่ตรงกับกริด — ไม่ได้นำเข้า'
       return null
     }
-    if (target === 'b' && !canUseSideB.value) {
-      message.value = 'ด้าน B ไม่มีชุดสี — ไม่ได้นำเข้าผลลัพธ์'
-      return null
-    }
-    const grid = decodeRle(data.rle, gridW.value * gridH.value)
-    if (!grid) {
+    const decoded = decodeRle(data.rle, gridW.value * gridH.value)
+    if (!decoded) {
       message.value = 'ข้อมูลจากตัวแปลงเสียหาย — ไม่ได้นำเข้า'
       return null
     }
-    return { side: target, grid }
+    return { grid: decoded }
   } catch {
     return null
   }
 }
 
-function applyGridReplacement(target: Side, next: Grid, label: string, activate = true) {
-  const grid = target === 'a' ? gridA.value : gridB.value
-  if (grid.length !== next.length) return
-  const editor = new GridEditor(grid)
-  for (let i = 0; i < grid.length; i += 1) {
-    if (grid[i] !== next[i]) editor.set(i, next[i]!)
+function applyGridReplacement(next: Grid, label: string) {
+  const g = grid.value
+  if (g.length !== next.length) return
+  const editor = new GridEditor(g)
+  for (let i = 0; i < g.length; i += 1) {
+    if (g[i] !== next[i]) editor.set(i, next[i]!)
   }
-  const change = sanitizeBlocked(editor.commit(), grid)
+  const change = sanitizeBlocked(editor.commit(), g)
   if (!change) return
-  if (activate) side.value = target
-  historyFor(target).push(change)
+  history.push(change)
   historyTick.value += 1
   countsTick.value += 1
   revision.value += 1
@@ -373,11 +350,9 @@ function applyGridReplacement(target: Side, next: Grid, label: string, activate 
 const draftKey = computed(() => (stunt.value ? `pixelstand:draft:${stunt.value.id}` : ''))
 let draftTimer: number | undefined
 
-function decodeDraft(data: DraftPayload): { a: Grid; b: Grid } | null {
+function decodeDraft(data: DraftPayload): Grid | null {
   if (data.w !== gridW.value || data.h !== gridH.value) return null
-  const a = decodeRle(data.a, data.w * data.h)
-  const b = decodeRle(data.b, data.w * data.h)
-  return a && b ? { a, b } : null
+  return decodeRle(data.g, data.w * data.h)
 }
 
 function readDraft() {
@@ -392,7 +367,7 @@ function readDraft() {
       localStorage.removeItem(key)
       return
     }
-    if (gridEquals(decoded.a, gridA.value) && gridEquals(decoded.b, gridB.value)) {
+    if (gridEquals(decoded, grid.value)) {
       localStorage.removeItem(key)
       return
     }
@@ -415,16 +390,11 @@ function restoreDraftSilently(): boolean {
     const data = JSON.parse(raw) as DraftPayload
     const decoded = decodeDraft(data)
     if (!decoded) return false
-    let applied = false
-    if (!gridEquals(decoded.a, gridA.value)) {
-      applyGridReplacement('a', decoded.a, '', false)
-      applied = true
+    if (!gridEquals(decoded, grid.value)) {
+      applyGridReplacement(decoded, '')
+      return true
     }
-    if (!gridEquals(decoded.b, gridB.value)) {
-      applyGridReplacement('b', decoded.b, '', false)
-      applied = true
-    }
-    return applied
+    return false
   } catch {
     return false
   }
@@ -436,8 +406,7 @@ function persistDraft() {
     const payload: DraftPayload = {
       w: gridW.value,
       h: gridH.value,
-      a: encodeRle(gridA.value),
-      b: encodeRle(gridB.value),
+      g: encodeRle(grid.value),
       at: Date.now(),
     }
     localStorage.setItem(draftKey.value, JSON.stringify(payload))
@@ -455,15 +424,13 @@ function scheduleDraftSave() {
 function restoreDraft() {
   const data = draftBanner.value
   if (!data) return
-  const a = decodeRle(data.a, gridW.value * gridH.value)
-  const b = decodeRle(data.b, gridW.value * gridH.value)
-  if (!a || !b) {
+  const decoded = decodeRle(data.g, gridW.value * gridH.value)
+  if (!decoded) {
     draftBanner.value = null
     localStorage.removeItem(draftKey.value)
     return
   }
-  applyGridReplacement('a', a, 'กู้คืนแบบร่างแล้ว', false)
-  if (!gridEquals(b, gridB.value)) applyGridReplacement('b', b, 'กู้คืนแบบร่างด้าน B แล้ว', false)
+  applyGridReplacement(decoded, 'กู้คืนแบบร่างแล้ว')
   draftBanner.value = null
   localStorage.removeItem(draftKey.value)
 }
@@ -479,11 +446,9 @@ async function revertUnsaved() {
   saving.value = true
   error.value = ''
   try {
-    const grid = await stuntsService.getGrid(stunt.value.id)
-    gridA.value = fromApiGrid(grid.grid_data_a, grid.grid_width, grid.grid_height)
-    gridB.value = fromApiGrid(grid.grid_data_b, grid.grid_width, grid.grid_height)
-    historyA.clear()
-    historyB.clear()
+    const g = await stuntsService.getGrid(stunt.value.id)
+    grid.value = fromApiGrid(g.grid_data, g.grid_width, g.grid_height)
+    history.clear()
     historyTick.value += 1
     countsTick.value += 1
     revision.value += 1
@@ -531,7 +496,7 @@ function sanitizeBlocked(
 function commitChange(change: GridChange | null) {
   const safe = sanitizeBlocked(change)
   if (!safe) return
-  historyFor(side.value).push(safe)
+  history.push(safe)
   historyTick.value += 1
   countsTick.value += 1
   revision.value += 1
@@ -540,7 +505,7 @@ function commitChange(change: GridChange | null) {
 }
 
 function undo() {
-  if (historyFor(side.value).undo(currentGrid())) {
+  if (history.undo(currentGrid())) {
     historyTick.value += 1
     countsTick.value += 1
     revision.value += 1
@@ -550,7 +515,7 @@ function undo() {
 }
 
 function redo() {
-  if (historyFor(side.value).redo(currentGrid())) {
+  if (history.redo(currentGrid())) {
     historyTick.value += 1
     countsTick.value += 1
     revision.value += 1
@@ -932,14 +897,12 @@ async function save() {
   message.value = ''
   try {
     const body: {
-      grid_data_a: Array<number | null>
-      grid_data_b?: Array<number | null>
+      grid_data: Array<number | null>
       note: string
     } = {
-      grid_data_a: toApiGrid(gridA.value),
+      grid_data: toApiGrid(grid.value),
       note: `Studio ${new Date().toLocaleString('th-TH')}`,
     }
-    if (stunt.value.palette_b_id) body.grid_data_b = toApiGrid(gridB.value)
     const updated = await stuntsService.saveGrid(stunt.value.id, body)
     stunt.value = updated
     dirty.value = false
@@ -975,11 +938,9 @@ async function restoreRevision(rev: RevisionOut) {
   error.value = ''
   try {
     await stuntsService.restoreRevision(stunt.value.id, rev.id)
-    const grid = await stuntsService.getGrid(stunt.value.id)
-    gridA.value = fromApiGrid(grid.grid_data_a, grid.grid_width, grid.grid_height)
-    gridB.value = fromApiGrid(grid.grid_data_b, grid.grid_width, grid.grid_height)
-    historyA.clear()
-    historyB.clear()
+    const g = await stuntsService.getGrid(stunt.value.id)
+    grid.value = fromApiGrid(g.grid_data, g.grid_width, g.grid_height)
+    history.clear()
     historyTick.value += 1
     countsTick.value += 1
     revision.value += 1
@@ -1203,25 +1164,13 @@ function setTool(next: Tool) {
         </p>
       </div>
 
-      <div class="ml-auto inline-flex rounded-control border border-line bg-surface p-0.5">
-        <button
-          type="button"
-          class="h-9 rounded-lg px-3 text-[13px] font-semibold"
-          :class="side === 'a' ? 'bg-brand-tint text-brand' : 'text-ink-2'"
-          @click="side = 'a'"
-        >
-          ด้าน A
-        </button>
-        <button
-          type="button"
-          class="h-9 rounded-lg px-3 text-[13px] font-semibold disabled:opacity-40"
-          :class="side === 'b' ? 'bg-brand-tint text-brand' : 'text-ink-2'"
-          :disabled="!canUseSideB"
-          @click="side = 'b'"
-        >
-          ด้าน B
-        </button>
-      </div>
+      <span
+        v-if="stunt"
+        class="ml-auto inline-flex h-9 items-center rounded-full px-3 text-[12px] font-bold uppercase"
+        :class="stunt.side === 'A' ? 'bg-brand-tint text-brand' : 'bg-canvas text-ink-2'"
+      >
+        ด้าน {{ stunt.side }}
+      </span>
 
       <AppButton size="sm" :loading="saving" :disabled="!canEdit || !dirty" @click="save">
         <template #icon><i class="bi bi-cloud-arrow-up" aria-hidden="true" /></template>
@@ -1257,7 +1206,7 @@ function setTool(next: Tool) {
       v-else-if="!canEdit"
       icon="bi-palette"
       title="ฉากนี้ยังไม่มีชุดสีที่ใช้ได้"
-      description="กลับไปหน้าแก้ไขฉากเพื่อกำหนดชุดสี A (และ B ถ้าต้องการ) ก่อนเปิด Studio"
+      description="ไปที่หน้า ภาพรวม → ตั้งค่างาน เพื่อกำหนดชุดสี ด้าน A / ด้าน B ก่อนเปิด Studio"
     >
       <AppButton size="sm" @click="backToStunts">กลับไปแก้ไขฉาก</AppButton>
     </AppEmptyState>
@@ -1390,7 +1339,7 @@ function setTool(next: Tool) {
           <AppCard :padded="true">
             <div class="mb-2 flex items-center justify-between">
               <h3 class="text-caption font-bold text-ink-2">
-                ชุดสี {{ side.toUpperCase() }}
+                ชุดสี ด้าน {{ stunt?.side }}
               </h3>
               <span class="text-[11px] text-ink-3">{{ palette?.name }}</span>
             </div>

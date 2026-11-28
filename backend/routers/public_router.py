@@ -2,17 +2,32 @@ import asyncio
 import json
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from core.config import settings
 from core.dependencies import get_db_pool
-from core.exceptions import ValidationError
 from core.live_stream import hub
-from services import public_service, live_service
+from core.ratelimit import check_rate_limit
 from routers._common import map_err
+from services import public_service, live_service
 
 router = APIRouter(prefix="/events", tags=["Public"])
+
+
+class ClaimRequest(BaseModel):
+    access_code: str
+
+
+def _ip(request: Request) -> str:
+    cf = request.headers.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
 
 
 @router.get("/{slug}/meta")
@@ -24,23 +39,17 @@ async def meta(slug: str, request: Request, pool: asyncpg.Pool = Depends(get_db_
     return public_service.respond_cached(body, etag, max_age, request.headers.get("if-none-match"))
 
 
-@router.get("/{slug}/seat")
-async def seat(slug: str, request: Request,
-               row: int | None = Query(None, ge=1), col: int | None = Query(None, ge=1),
-               stand_id: int | None = Query(None),
-               student_code: str | None = Query(None),
-               pool: asyncpg.Pool = Depends(get_db_pool)):
-    """เลือกที่นั่งได้ 2 ทาง: row+col (1-based) หรือ student_code (ถ้า event เปิด roster lookup)."""
+@router.post("/{slug}/claim")
+async def claim(slug: str, req: ClaimRequest, request: Request, pool: asyncpg.Pool = Depends(get_db_pool)):
+    """ล็อกอินด้วยรหัสสุ่ม (พิมพ์แจกนักเรียน) — rate-limit ต่อ IP กัน brute-force."""
     try:
-        if student_code:
-            body, etag, max_age = await public_service.seat_by_student_code(pool, slug, student_code)
-        elif row is not None and col is not None:
-            body, etag, max_age = await public_service.seat(pool, slug, row, col, stand_id)
-        else:
-            raise ValidationError("ต้องระบุ row+col หรือ student_code")
+        await check_rate_limit(
+            [f"pixelstand:ratelimit:claim:ip:{_ip(request)}"],
+            settings.CLAIM_RATE_LIMIT_MAX, settings.CLAIM_RATE_LIMIT_WINDOW_SECONDS,
+        )
+        return await public_service.claim(pool, slug, req.access_code)
     except Exception as e:
         raise map_err(e)
-    return public_service.respond_cached(body, etag, max_age, request.headers.get("if-none-match"))
 
 
 @router.get("/{slug}/version")

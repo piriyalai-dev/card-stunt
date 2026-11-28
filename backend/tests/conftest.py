@@ -32,7 +32,7 @@ settings.EXPORT_STORAGE_DIR = tempfile.mkdtemp(prefix="pixel_export_test_")
 
 _TABLES = (
     "users", "events", "stands", "palettes", "palette_colors", "stunts",
-    "stunt_revisions", "seat_rosters", "export_jobs", "audit_logs",
+    "stunt_revisions", "seat_rosters", "export_jobs", "audit_logs", "live_queue",
 )
 
 
@@ -181,3 +181,15 @@ async def palette_row(admin, client, event_row):
                       headers=_auth(admin["token"]))
     assert res.status_code == 200, res.text
     return res.json()
+
+
+@pytest_asyncio.fixture
+async def event_with_palettes(admin, client, event_row, palette_row):
+    """event ที่ตั้ง palette A/B ระดับงานแล้ว — จำเป็นก่อน save grid (validation อ่านจาก event)."""
+    res = client.patch(
+        f"/api/v1/events/{event_row['id']}",
+        json={"palette_a_id": palette_row["id"], "palette_b_id": palette_row["id"]},
+        headers=_auth(admin["token"]),
+    )
+    assert res.status_code == 200, res.text
+    return event_row

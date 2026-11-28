@@ -2,42 +2,33 @@
 /**
  * 🎓 Student Viewer (public PWA) — /e/:slug?
  *
- * 3 สถานะ: picker (เลือกที่นั่ง) → list (โพยทุกฉาก) → focus (โฟกัสกลางแสตน)
+ * 3 สถานะ: code (ใส่รหัสล็อกอิน) → list (โพยทุกฉาก) → focus (โฟกัสกลางแสตน)
  *
+ * - ล็อกอินด้วยรหัสสุ่มที่พิมพ์แจกนักเรียน (ไม่เลือกที่นั่ง/ค้นหาเลข ปชช. — กันลิงค์หลุดต่อภาพ)
  * - ข้อมูล meta/seat ถูก cache ลง localStorage ⇒ เปิดออฟไลน์กลางสนามได้หลังเคยเปิดออนไลน์
  * - SSE live sync เป็น "ของแถม": หลุดได้โดยผู้ใช้ยังเลื่อนเองได้ (ห้าม block UI)
- * - เวอร์ชันใหม่ของงาน: เช็คทุก 60 วิ + ตอนกลับมา online แล้วโหลดใหม่ให้อัตโนมัติ
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import CodeEntry from '@/components/viewer/CodeEntry.vue'
 import CueList from '@/components/viewer/CueList.vue'
 import FocusMode from '@/components/viewer/FocusMode.vue'
-import SeatPicker from '@/components/viewer/SeatPicker.vue'
 import { errorMessage } from '@/lib/format'
 import {
   cacheKeys,
+  getLastAccess,
   getLastSlug,
-  readCache,
   removeCache,
+  setLastAccess,
   setLastSlug,
-  writeCache,
 } from '@/services/publicCache'
 import {
   checkVersion,
+  loadClaim,
   loadMeta,
-  loadSeatByCode,
-  loadSeatByPosition,
   subscribeLive,
 } from '@/services/publicApi'
 import type { PublicMeta, PublicSeat } from '@/types/public'
-
-interface SavedSelection {
-  stand_id: number
-  row: number
-  col: number
-  row_label: string
-  seat_label: string
-}
 
 const route = useRoute()
 
@@ -51,7 +42,7 @@ const error = ref('')
 const seatError = ref('')
 const offline = ref(false)
 const savedAt = ref<number | null>(null)
-const view = ref<'picker' | 'list' | 'focus'>('picker')
+const view = ref<'code' | 'list' | 'focus'>('code')
 const focusIndex = ref(0)
 const liveStuntId = ref<number | null>(null)
 const liveActive = ref(false)
@@ -83,27 +74,15 @@ function savedAtText(ts: number | null): string {
   })
 }
 
-function persistSelection(data: PublicSeat): void {
-  const saved: SavedSelection = {
-    stand_id: data.stand_id,
-    row: data.row_index + 1,
-    col: data.col_index + 1,
-    row_label: data.row_label,
-    seat_label: data.seat_label,
-  }
-  writeCache(cacheKeys.selection(slug.value), saved)
-}
-
-async function applySeatLoader(loader: () => Promise<{ data: PublicSeat; offline: boolean; saved_at: number }>): Promise<void> {
+async function claim(code: string): Promise<void> {
   busy.value = true
   seatError.value = ''
   try {
-    const result = await loader()
+    const result = await loadClaim(slug.value, code)
     seat.value = result.data
-    // ใช้ค่าของคำขอล่าสุด (ถ้ากลับมาออนไลน์แล้ว ไม่ควรค้างป้ายออฟไลน์จากรอบก่อน)
     offline.value = result.offline
     savedAt.value = result.saved_at
-    persistSelection(result.data)
+    setLastAccess(slug.value, code)
     view.value = 'list'
     window.scrollTo({ top: 0 })
   } catch (e) {
@@ -113,21 +92,13 @@ async function applySeatLoader(loader: () => Promise<{ data: PublicSeat; offline
   }
 }
 
-function selectSeat(payload: { standId: number; row: number; col: number }): void {
-  void applySeatLoader(() =>
-    loadSeatByPosition(slug.value, payload.standId, payload.row, payload.col),
-  )
-}
-
-function searchCode(code: string): void {
-  void applySeatLoader(() => loadSeatByCode(slug.value, code))
-}
-
-function changeSeat(): void {
-  removeCache(cacheKeys.selection(slug.value))
+function changeCode(): void {
+  const code = getLastAccess(slug.value)
+  if (code) removeCache(cacheKeys.access(slug.value, code))
+  removeCache(cacheKeys.lastAccess(slug.value))
   seat.value = null
   seatError.value = ''
-  view.value = 'picker'
+  view.value = 'code'
   window.scrollTo({ top: 0 })
 }
 
@@ -177,13 +148,13 @@ async function refreshData(reason?: string): Promise<void> {
     liveActive.value = metaResult.data.live.is_active
 
     if (seat.value) {
-      const current = seat.value
-      const seatResult = await loadSeatByPosition(
-        slug.value, current.stand_id, current.row_index + 1, current.col_index + 1,
-      )
-      seat.value = seatResult.data
-      offline.value = offline.value || seatResult.offline
-      savedAt.value = seatResult.saved_at
+      const code = getLastAccess(slug.value)
+      if (code) {
+        const seatResult = await loadClaim(slug.value, code)
+        seat.value = seatResult.data
+        offline.value = offline.value || seatResult.offline
+        savedAt.value = seatResult.saved_at
+      }
     }
 
     if (reason) showNotice(reason)
@@ -213,19 +184,18 @@ async function init(): Promise<void> {
 
     startLive()
 
-    const saved = readCache<SavedSelection>(cacheKeys.selection(slug.value))
-    if (saved) {
+    const savedCode = getLastAccess(slug.value)
+    if (savedCode) {
       try {
-        const seatResult = await loadSeatByPosition(
-          slug.value, saved.data.stand_id, saved.data.row, saved.data.col,
-        )
+        const seatResult = await loadClaim(slug.value, savedCode)
         seat.value = seatResult.data
         offline.value = offline.value || seatResult.offline
         savedAt.value = seatResult.saved_at
         view.value = 'list'
       } catch {
-        // ที่นั่งเดิมใช้ไม่ได้แล้ว (ถูกแก้ผัง/ปิดช่อง) — กลับไปเลือกใหม่ ไม่ใช่ค้าง error
-        removeCache(cacheKeys.selection(slug.value))
+        // รหัสเดิมใช้ไม่ได้แล้ว (โดนลบ/งานเปลี่ยน) — กลับไปใส่ใหม่ ไม่ใช่ค้าง error
+        removeCache(cacheKeys.access(slug.value, savedCode))
+        removeCache(cacheKeys.lastAccess(slug.value))
       }
     }
   } catch (e) {
@@ -252,7 +222,7 @@ function openSlug(): void {
 watch(slug, () => {
   seat.value = null
   meta.value = null
-  view.value = 'picker'
+  view.value = 'code'
   void init()
 })
 
@@ -279,7 +249,7 @@ onUnmounted(() => {
       <div class="grid h-16 w-16 place-items-center rounded-2xl bg-brand font-display text-3xl font-extrabold text-white">P</div>
       <h1 class="mt-4 font-display text-title-l font-bold text-ink-1">Pixel Stand</h1>
       <p class="mt-2 text-body text-ink-2">
-        เปิดลิงก์/QR ของงานจากผู้ดูแล เพื่อดูโพยของที่นั่งคุณ
+        เปิดลิงก์/QR ของงานจากผู้ดูแล แล้วใส่รหัสล็อกอินของที่นั่งคุณ
       </p>
       <form class="mt-5 flex w-full gap-2" @submit.prevent="openSlug">
         <input
@@ -321,13 +291,12 @@ onUnmounted(() => {
         {{ notice }}
       </div>
 
-      <SeatPicker
-        v-if="view === 'picker'"
+      <CodeEntry
+        v-if="view === 'code'"
         :meta="meta"
         :busy="busy"
         :error="seatError"
-        @select="selectSeat"
-        @search-code="searchCode"
+        @claim="claim"
       />
 
       <CueList
@@ -338,7 +307,7 @@ onUnmounted(() => {
         :saved-at="savedAt"
         :live-connected="liveConnected"
         @focus="openFocus"
-        @change-seat="changeSeat"
+        @change-seat="changeCode"
       />
 
       <FocusMode

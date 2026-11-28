@@ -321,9 +321,10 @@ async def _load_data(pool: asyncpg.Pool, job: dict) -> dict:
             )
         stunts = [dict(r) for r in stunt_rows]
 
-        palette_ids = sorted({
-            int(s[k]) for s in stunts for k in ("palette_a_id", "palette_b_id") if s.get(k)
-        })
+        ev = await conn.fetchrow(
+            "SELECT palette_a_id, palette_b_id FROM events WHERE id = $1", event["id"],
+        )
+        palette_ids = [pid for pid in (ev["palette_a_id"], ev["palette_b_id"]) if pid]
         palettes = []
         for pid in palette_ids:
             palette = await conn.fetchrow(
@@ -342,7 +343,7 @@ async def _load_data(pool: asyncpg.Pool, job: dict) -> dict:
             })
 
         roster_rows = await conn.fetch(
-            "SELECT stand_id, row_index, col_index, row_label, seat_label, student_code, student_name"
+            "SELECT stand_id, row_index, col_index, row_label, seat_label, student_code, access_code, student_name"
             " FROM seat_rosters WHERE event_id = $1 AND deleted_at IS NULL"
             " ORDER BY stand_id, row_index, col_index",
             event["id"],

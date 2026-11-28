@@ -112,11 +112,11 @@ async def delete_palette(pool: asyncpg.Pool, actor_id: int, palette_id: int) -> 
             if not row:
                 raise NotFoundError("ไม่พบ palette")
             in_use = await conn.fetchval(
-                "SELECT 1 FROM stunts WHERE (palette_a_id = $1 OR palette_b_id = $1) AND deleted_at IS NULL LIMIT 1",
+                "SELECT 1 FROM events WHERE (palette_a_id = $1 OR palette_b_id = $1) AND deleted_at IS NULL LIMIT 1",
                 palette_id,
             )
             if in_use:
-                raise ConflictError("palette นี้ถูกใช้โดย stunt — ลบไม่ได้")
+                raise ConflictError("palette นี้ถูกใช้เป็นชุดสี A/B ของ event — ลบไม่ได้")
             await conn.execute("UPDATE palette_colors SET deleted_at = NOW() WHERE palette_id = $1", palette_id)
             await conn.execute("UPDATE palettes SET deleted_at = NOW() WHERE id = $1", palette_id)
             await AuditLogger("palettes").log(
@@ -192,14 +192,13 @@ async def delete_color(pool: asyncpg.Pool, actor_id: int, color_id: int, replace
             if not row:
                 raise NotFoundError("ไม่พบสี")
             used = await conn.fetch(
-                "SELECT id, grid_data_a, grid_data_b FROM stunts"
-                " WHERE deleted_at IS NULL AND (grid_data_a IS NOT NULL OR grid_data_b IS NOT NULL)",
+                "SELECT id, grid_data FROM stunts"
+                " WHERE deleted_at IS NULL AND grid_data IS NOT NULL",
             )
             affected = []
             for st in used:
-                a = _json(st["grid_data_a"])
-                b = _json(st["grid_data_b"])
-                if color_id in a or color_id in b:
+                data = _json(st["grid_data"])
+                if color_id in data:
                     affected.append(st["id"])
             if affected and not replacement_color_id:
                 raise ConflictError(
@@ -208,15 +207,13 @@ async def delete_color(pool: asyncpg.Pool, actor_id: int, color_id: int, replace
             # เขียนทับ color_id → replacement ในทุก grid ที่ใช้
             for st_id in affected:
                 st = await conn.fetchrow(
-                    "SELECT grid_data_a, grid_data_b FROM stunts WHERE id = $1", st_id,
+                    "SELECT grid_data FROM stunts WHERE id = $1", st_id,
                 )
-                a = _json(st["grid_data_a"])
-                b = _json(st["grid_data_b"])
-                new_a = [replacement_color_id if v == color_id else v for v in a]
-                new_b = [replacement_color_id if v == color_id else v for v in b]
+                data = _json(st["grid_data"])
+                new_data = [replacement_color_id if v == color_id else v for v in data]
                 await conn.execute(
-                    "UPDATE stunts SET grid_data_a = $1::jsonb, grid_data_b = $2::jsonb, updated_at = NOW() WHERE id = $3",
-                    json.dumps(new_a), json.dumps(new_b), st_id,
+                    "UPDATE stunts SET grid_data = $1::jsonb, updated_at = NOW() WHERE id = $2",
+                    json.dumps(new_data), st_id,
                 )
             await conn.execute("UPDATE palette_colors SET deleted_at = NOW() WHERE id = $1", color_id)
             await AuditLogger("palettes").log(

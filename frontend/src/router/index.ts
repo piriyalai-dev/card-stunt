@@ -85,6 +85,12 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresPermission: 'MANAGE_STUNTS' },
         },
         {
+          path: 'stunts/upload/:eventId',
+          name: 'stunt-upload',
+          component: () => import('@/views/admin/StuntUploadWizard.vue'),
+          meta: { requiresAuth: true, requiresPermission: 'MANAGE_STUNTS' },
+        },
+        {
           path: 'password',
           name: 'admin-password',
           component: () => import('@/views/auth/ChangePassword.vue'),
