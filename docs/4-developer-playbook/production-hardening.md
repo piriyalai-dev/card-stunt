@@ -1,19 +1,42 @@
 # Production Hardening — checklist
 
 > งานของ "deploy swarm จริง" — **Wave 7 ทำแล้ว:** Docker secrets · resource limits · coverage
-> **เหลือแค่ HTTPS** (ข้อ 1) ที่แตะ `global_proxy` traefik ที่แชร์กับทั้งเครื่อง ⇒ ต้องทำอย่างระวัง
-> + สิทธิ์ root/เจ้าของเครื่อง (ดู `~/CLAUDE.md`)
+> **HTTPS (ข้อ 1)** ตัดสินใจใช้ **Cloudflare edge TLS** — ไม่แตะ shared traefik (ดูข้อ 1)
 
 ---
 
-## 1. 🔒 HTTPS / ACME (ยังไม่ได้ทำ — แตะ `global_proxy` traefik ที่แชร์)
+## 1. 🔒 HTTPS — ใช้ Cloudflare (edge TLS) · ไม่แตะ shared traefik
 
-**สถานะตอนนี้:** `global_proxy` traefik (`~/ops/deploy/traefik-proxy/docker-compose.yml`)
-มีแค่ entrypoint `web` (`:80`) · **ไม่มี** `:443` · **ไม่มี** certresolver ⇒ JWT/รหัสผ่าน/โพย
-วิ่ง cleartext · card-stunt ยัง HTTP ล้วน
+**ตัดสินใจ (2026-11-28):** ไม่ทำ ACME บน `global_proxy` traefik — มัน route ทุกเว็บของเครื่อง
+และ redeploy stack `global` กระทบทุก site ⇒ ใช้ **Cloudflare** เทอร์มินัล TLS ที่ edge แทน
+origin (traefik port 80) ยัง HTTP ตามเดิม ⇒ **ไม่ต้องแก้ traefik หรือระบบอื่น**
 
-**ความเสี่ยง:** traefik ตัวนี้ route **ทุกเว็บของเครื่อง** (production/staging/tools) ⇒ แก้แล้ว
-ต้อง redeploy stack `global` ซึ่งกระทบทุก site · ทำช่วง traffic น้อย + เตรียม rollback
+**ฝั่ง Cloudflare (เจ้าของเครื่องทำ):** DNS `pixel.singto1597.xyz` + `pixel-api.singto1597.xyz`
+แบบ proxied (orange cloud) หรือ Cloudflare Tunnel (`cloudflared.service` ที่รันอยู่แล้ว)
+· TLS mode **Full** · เปิด **Always Use HTTPS** (redirect http→https ที่ edge)
+
+**ฝั่ง card-stunt (แค่ `.env` + rebuild — ไม่แตะ infra ที่แชร์):**
+
+```env
+REFRESH_COOKIE_SECURE=true                          # cookie ต้อง Secure บน https
+VITE_API_BASE_URL=https://pixel-api.singto1597.xyz  # rebuild frontend — URL bake ลง bundle
+```
+
+- `CORS_ORIGINS` มี `https://pixel.singto1597.xyz` อยู่แล้วใน default → ไม่ต้องแก้
+- media signed URL ใช้ relative path → ใช้ได้บน https โดยไม่ต้องเปลี่ยน
+
+> ⚠️ Cloudflare Tunnel เป็นช่องทางออก ไม่ใช่เปิดพอร์ต — origin traefik (80) ยังรัน HTTP ตามเดิม
+> ไม่ต้องเปิด `:443` ที่ origin เลย
+
+---
+
+## 1a. (สำรอง) traefik + Let's Encrypt — ถ้าไม่ใช้ Cloudflare
+
+<details>
+<summary>แนวทาง ACME บน shared traefik (ไม่ได้ใช้ — เก็บไว้อ้างอิง)</summary>
+
+**ความเสี่ยง:** traefik ตัวนี้ route **ทุกเว็บของเครื่อง** ⇒ แก้แล้วต้อง redeploy stack `global`
+ซึ่งกระทบทุก site · ทำช่วง traffic น้อย + เตรียม rollback
 
 ### ขั้นตอน
 
@@ -44,7 +67,9 @@
    (`entrypoints=websecure` + `tls=true` + `tls.certresolver=letsencrypt`) ของทั้ง backend/frontend
    · `./pull_all.sh` redeploy · แล้วเช็ค `https://pixel.singto1597.xyz`
 5. **อัปเดต `CORS_ORIGINS` + `VITE_API_BASE_URL`** ให้เป็น `https://…` แล้ว rebuild frontend
-   · เปิด `REFRESH_COOKIE_SECURE=true` (cookie ต้อง secure บน HTTPS)
+   · เปิด `REFRESH_COOKIE_SECURE=true`
+
+</details>
 
 ---
 
@@ -92,4 +117,4 @@
 - [x] Docker secrets (ข้อ 2) — `core/config.py` + compose + setup/pull_all
 - [x] Resource limits (ข้อ 3) — `deploy.resources` ทั้ง 5 services
 - [x] Coverage (Wave 7) — test_runner รัน pytest `--cov` (report ขึ้น CI log)
-- [ ] HTTPS (ข้อ 1) — รอตัดสินใจ + แตะ shared traefik
+- [ ] HTTPS (ข้อ 1) — ใช้ Cloudflare edge TLS · รอเจ้าของเครื่องตั้ง DNS/tunnel + flip `REFRESH_COOKIE_SECURE=true` + rebuild frontend (`VITE_API_BASE_URL=https://…`)
